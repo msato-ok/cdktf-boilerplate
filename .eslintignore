@@ -1,0 +1,6 @@
+lib/
+cdktf.out/
+node_modules/
+.gen/
+jest.config.js
+.eslintrc.js

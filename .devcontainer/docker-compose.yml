@@ -1,0 +1,4 @@
+services:
+  cdktf:
+    # DevContainer 実行時のみ、コンテナを常駐させる
+    command: tail -f /dev/null

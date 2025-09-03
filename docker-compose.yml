@@ -1,0 +1,18 @@
+services:
+  cdktf:
+    build:
+      context: .
+      dockerfile: docker/cdktf/Dockerfile
+      args:
+        - UID=${UID}
+        - GID=${GID}
+        - USERNAME=${USERNAME}
+        - GROUPNAME=${GROUPNAME}
+    volumes:
+      - .:/workspace:cached
+      - cdktf_node_modules:/workspace/node_modules
+    env_file: .env
+
+volumes:
+  cdktf_node_modules:
+    driver: local

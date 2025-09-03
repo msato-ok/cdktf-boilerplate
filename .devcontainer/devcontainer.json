@@ -1,0 +1,72 @@
+{
+  "name": "CDKTF Development",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
+  "service": "cdktf",
+  "workspaceFolder": "/workspace",
+  // features removed; all required tools are installed directly in the Dockerfile to avoid slow feature downloads
+  "customizations": {
+    "vscode": {
+      // Note: workspace-level `.vscode` content (except `settings.json`) is included in the repo
+      // Individual developers can create `.vscode/settings.json` from `.vscode/settings.json.sample`
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "[typescript]": {
+          "editor.insertSpaces": true,
+          "editor.detectIndentation": false,
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.fixAll.eslint": "explicit",
+            "source.organizeImports": "explicit"
+          }
+        },
+        "[javascript]": {
+          "editor.formatOnSave": true
+        },
+        "[json]": {
+          "editor.formatOnSave": true
+        },
+        "typescript.preferences.includePackageJsonAutoImports": "auto",
+        // エディタが自動でインポート文を挿入するときの設定
+        // "relative" — ./ や ../ を使う相対パスで挿入する（例: import { foo } from "../utils/foo"）
+        "typescript.preferences.importModuleSpecifier": "relative",
+        "files.exclude": {
+          "**/node_modules": true,
+          "**/lib": true,
+          "**/cdktf.out": true,
+          "**/.gen": true
+        },
+        "search.exclude": {
+          "**/node_modules": true,
+          "**/lib": true,
+          "**/cdktf.out": true,
+          "**/.gen": true
+        }
+      },
+      "extensions": [
+        // TypeScript, ESLint, Prettier
+        "ms-vscode.vscode-typescript-next",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        // Testing
+        "ms-vscode.test-adapter-converter",
+        "hbenl.vscode-test-explorer",
+        // Terraform
+        "hashicorp.terraform",
+        // JSON
+        "ms-vscode.vscode-json",
+        // Copilot
+        "GitHub.copilot",
+        // Docker
+        "ms-vscode.vscode-docker",
+        // EditorConfig
+        "EditorConfig.EditorConfig"
+      ]
+    }
+  },
+  "postCreateCommand": ".devcontainer/scripts/post-create.sh",
+  "remoteUser": "node",
+  "forwardPorts": [3000, 8080],
+  "mounts": ["source=${localWorkspaceFolder}/.terraform,target=/workspace/.terraform,type=bind,consistency=cached"]
+}

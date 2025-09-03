@@ -1,0 +1,18 @@
+node_modules
+dist
+lib
+cdktf.out
+.cdk
+.terraform
+.coverage
+.vscode
+.idea
+*.log
+.DS_Store
+# Terraform state/backups
+*.tfstate
+*.tfstate.*
+*.backup
+
+# Keep Prettier config tracked
+!.prettierrc

@@ -1,0 +1,64 @@
+name: Deploy (Env Credentials)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: latest
+
+      - name: Symlink terraform -> tofu (CDKTF compatibility)
+        run: sudo ln -sf "$(command -v tofu)" /usr/local/bin/terraform
+
+      - name: Export AWS env credentials
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          SG_ID: ${{ secrets.SG_ID }}
+          ENVIRONMENT: prod
+        run: |
+          test -n "$AWS_ACCESS_KEY_ID" && echo "AWS_ACCESS_KEY_ID set" || (echo "Missing AWS_ACCESS_KEY_ID" && exit 1)
+          test -n "$AWS_SECRET_ACCESS_KEY" && echo "AWS_SECRET_ACCESS_KEY set" || (echo "Missing AWS_SECRET_ACCESS_KEY" && exit 1)
+          test -n "$AWS_SESSION_TOKEN" && echo "AWS_SESSION_TOKEN set" || (echo "Missing AWS_SESSION_TOKEN" && exit 1)
+          test -n "$SG_ID" && echo "SG_ID set" || (echo "Missing SG_ID" && exit 1)
+          echo "Credentials present. Proceeding."
+          echo "AWS_REGION=$AWS_REGION" >> $GITHUB_ENV
+          echo "SG_ID=$SG_ID" >> $GITHUB_ENV
+          echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Plan
+        run: npm run plan:prod
+
+      - name: Deploy
+        if: github.ref == 'refs/heads/main'
+        run: npm run deploy:prod -- -a
+

@@ -1,0 +1,48 @@
+# Node / build artifacts
+.npmignore
+node_modules
+**/node_modules
+dist
+build
+lib
+coverage
+npm-debug.log*
+.yarn
+.yarnrc
+.pnp.*
+
+# Git
+.git
+.gitignore
+
+# Dev containers / editor
+.vscode/
+.idea/
+.vscode-test/
+
+# Terraform / CDKTF outputs
+cdktf.out
+.terraform
+terraform.tfstate*
+*.tfstate
+
+# Local env files
+.env
+.env.*
+
+# Docker
+Dockerfile
+.dockerignore
+
+# OS / misc
+*.log
+tmp/
+.cache/
+*.tgz
+
+# Optional: exclude local secrets or credentials
+.ssh/
+
+# If you need parts of the repo copied into the image during build (for prebuild),
+# remove them from this file or add exceptions. For example, to allow copying .devcontainer:
+# !.devcontainer/

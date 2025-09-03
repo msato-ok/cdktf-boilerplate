@@ -1,0 +1,15 @@
+# high=常に推論モードを有効化 / default=medium
+model_reasoning_effort = "high"
+
+# 出力表示に関する設定
+# true=出力はシンプルに「最終回答」や「生成物」だけになる
+hide_agent_reasoning = true
+
+# true=エージェントが外部の API やウェブにアクセスする機能を有効化
+network_access = true
+
+# notify = ["bash", "-lc", "afplay /System/Library/Sounds/Ping.aiff"]
+
+[tools]
+# true=必要に応じて検索エンジンを呼び出す
+web_search = true

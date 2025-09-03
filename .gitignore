@@ -1,0 +1,82 @@
+
+# Node / package manager
+node_modules/
+/.pnp/
+
+# Build output
+dist/
+build/
+lib/
+out/
+cdktf.out/
+
+# TypeScript
+*.tsbuildinfo
+.tsbuildinfo
+.ts-node/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+logs/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Jest / cache
+node_modules/.cache/
+.jest/
+
+# Environment variables
+.env
+.env.*.local
+.env.local
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Misc caches
+.cache/
+.parcel-cache/
+/.parcel-cache/
+.turbo/
+
+# Distribution archives
+*.tgz
+*.gz
+
+# Runtime / PID files
+pids/
+*.pid
+*.pid.lock
+
+# Terraform / CDKTF
+.terraform/
+terraform.tfvars
+terraform.*.tfvars
+*.tfstate
+*.tfstate.*
+terraform.tfplan
+.terraformrc
+terraform.rc
+terraform-state/
+
+# Optional: local runtime files
+.serverless/
+.firebase/
+
+# Ignore local npm debug and lock temporary files sometimes produced by CI
+npm-debug.log
+
+# Generated OAuth checklists (可読性のため生成物は除外)
+oauth-checklist-*.md

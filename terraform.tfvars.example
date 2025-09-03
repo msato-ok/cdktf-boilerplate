@@ -1,0 +1,43 @@
+# Cloudflare configuration
+cloudflare_api_token = "your-cloudflare-api-token-here"
+cloudflare_account_id = "your-cloudflare-account-id-here"
+
+# Domain configuration
+# 開発環境例: domain_name = "dev-example.com", subdomain_name = "test"
+# 本番環境例: domain_name = "example.com", subdomain_name = "app"
+domain_name = "your-domain"
+subdomain_name = "subdomain"
+target_ip_address = "203.0.113.1"  # Replace with your actual target IP
+
+# Email domain allowed for access
+allowed_email_domain = "yourcompany.com"
+
+# Zero Trust チームドメイン（認証後のリダイレクトURIにも使われる）
+cloudflare_team_domain = "my-team"
+
+# Google OAuth configuration for Zero Trust Access
+# 開発と本番で異なるOAuthアプリケーションを使用することを推奨
+google_client_id = "your-google-client-id.apps.googleusercontent.com"
+google_client_secret = "GOCSPX-your-google-client-secret"
+
+# Google OAuth設定ガイダンス用
+## Google OAuth 2.0クライアントの作成は、Google審査プロセスがあるため、
+## 初回は必ず手動設定が必要であり、Terraformの対応も限定的で且つ複雑なので、
+## 手動操作をガイダンスの表示としている
+#
+## Google Cloud Project
+google_project_id = "my-google-oauth-project"
+
+# OAuth同意画面用サポートメールアドレス
+support_email = ""
+
+# ------------------------------------------------------------
+# AWS セキュリティグループ厳格化（Cloudflare IP のみ許可）
+# sg_id は import の都合上、環境変数 SG_ID で指定してください。
+## Cloudflare 公開IPレンジの指定について
+## - 通常は設定不要（CI/スクリプトが自動注入します）。
+## - 例外的に固定したい場合のみ、以下を手動設定してください。
+
+# Cloudflare 公開IPレンジ（通常は未設定）
+# cf_ipv4_cidrs = ["173.245.48.0/20", ...]
+# cf_ipv6_cidrs = ["2400:cb00::/32", ...]

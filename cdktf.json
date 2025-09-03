@@ -1,0 +1,12 @@
+{
+  "language": "typescript",
+  "app": "npm run --silent build && node lib/main.js",
+  "projectId": "cdktf-project",
+  "terraformProviders": [],
+  "terraformModules": [],
+  "context": {
+    "excludeStackIdFromLogicalIds": "true",
+    "allowSepCharsInLogicalIds": "true"
+  },
+  "terraformBinary": "tofu"
+}
