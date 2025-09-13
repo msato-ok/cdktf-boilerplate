@@ -71,12 +71,14 @@ export class CloudflareStack extends TerraformStack {
       name: domainName.stringValue,
     });
 
-    // SSL/TLS設定をFlexibleに設定（オリジンがHTTPの場合）
+    // SSL/TLS 設定を Flexible に設定（オリジンが HTTP の場合）
+    // 注意: cloudflare_zone_setting の value は実際にはプリミティブ値（"off"|"flexible"|"full"|"strict"）を期待します。
+    // CDKTF の型上はマップになっていますが、文字列を直接渡す必要があります。
     new ZoneSetting(this, 'ssl_tls_setting', {
       zoneId: zone.result.get(0).id,
       settingId: 'ssl',
-      value: { value: 'flexible' },
-      enabled: true,
+      // 型定義の都合で any キャストし、文字列を直接指定
+      value: 'flexible' as any,
     });
 
     // プロキシ有効のサブドメインを作成

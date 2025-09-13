@@ -36,28 +36,7 @@ export class ZeroTrustAccess extends Construct {
       },
     });
 
-    // 指定メールドメインを許可する再利用可能ポリシーを作成
-    this.policy = new ZeroTrustAccessPolicy(this, 'policy', {
-      accountId: props.accountId,
-      name: getAccessPolicyName(props.allowedEmailDomain),
-      decision: 'allow',
-      include: [
-        {
-          emailDomain: {
-            domain: props.allowedEmailDomain,
-          },
-        },
-      ],
-      require: [
-        {
-          loginMethod: {
-            id: this.identityProvider.id,
-          },
-        },
-      ],
-    });
-
-    // Access アプリケーションを作成（既存は CI の自動 import で採用）
+    // Access アプリケーションを作成（ポリシーはアプリケーション内で定義）
     this.application = new ZeroTrustAccessApplication(this, 'application', {
       accountId: props.accountId,
       name: getAccessAppName(props.subdomainName, props.domainName, props.environment),
@@ -70,11 +49,32 @@ export class ZeroTrustAccess extends Construct {
       allowedIdps: [this.identityProvider.id],
       policies: [
         {
-          id: this.policy.id,
+          name: getAccessPolicyName(props.allowedEmailDomain),
+          decision: 'allow',
+          include: [
+            {
+              emailDomain: {
+                domain: props.allowedEmailDomain,
+              },
+            },
+          ],
+          require: [
+            {
+              loginMethod: {
+                id: this.identityProvider.id,
+              },
+            },
+          ],
         },
       ],
-      dependsOn: [this.identityProvider, this.policy],
+      dependsOn: [this.identityProvider],
     });
+
+    // ダミーポリシー（アプリケーション内で定義されたポリシーの参照用）
+    this.policy = {
+      id: `${this.application.id}/0`,
+    } as any;
+
 
     // 出力
     new TerraformOutput(this, 'application_id', {
