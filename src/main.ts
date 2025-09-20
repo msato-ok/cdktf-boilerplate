@@ -1,8 +1,8 @@
 import { App, LocalBackend } from 'cdktf';
 import {
   AwsSgEnforceInlineStack,
-  CloudflareStack,
-  GoogleStack,
+  CloudflareZeroTrustStack,
+  CLOUDFLARE_ORIGIN_TYPE,
   runCfAutoImport,
   requireEnv,
   ensureAwsAuth,
@@ -12,14 +12,11 @@ async function main(): Promise<void> {
   const app = new App();
   const environment = requireEnv('ENVIRONMENT');
 
-  // 実行フロー: 複数のスタックを順番に実行
-
-  // 1. Google OAuth設定スタック
-  const google = new GoogleStack(app, 'google', { environment });
-  new LocalBackend(google, { path: `./terraform-state/${google.node.id}/${environment}/terraform.tfstate` });
-
-  // 2. Cloudflareスタック
-  const cf = new CloudflareStack(app, 'cloudflare', { environment });
+  // 2. Cloudflareスタック（HTTPオリジン用）
+  const cf = new CloudflareZeroTrustStack(app, 'cloudflare', {
+    environment,
+    originType: CLOUDFLARE_ORIGIN_TYPE.HTTP
+  });
   new LocalBackend(cf, { path: `./terraform-state/${cf.node.id}/${environment}/terraform.tfstate` });
 
   // 3. AWS Security Group設定スタック（必要に応じて）
