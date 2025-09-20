@@ -1,80 +1,23 @@
 import { App, LocalBackend } from 'cdktf';
-import * as fs from 'fs';
-import { runCfAutoImport } from './cloudflare/auto-import';
-// Google 認証ユーティリティ（現行フローでは直接使用しない）
-// import { checkGoogleAuthStatus, validateGoogleAuth } from './shared/google-auth-validator';
-import { AwsSgEnforceInlineStack } from './stacks/aws-sg-enforce-inline-stack';
-import { CloudflareStack } from './stacks/cloudflare-stack';
-import { GoogleStack } from './stacks/google-stack';
-import { loadGoogleConfig } from './shared/tfvars';
-import { parseSimpleTfvars } from './shared/tfvars';
-
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v || v.trim() === '') {
-    throw new Error(`必須環境変数が未設定です: ${name}`);
-  }
-  return v;
-}
-
-function ensureAwsAuth(): void {
-  const hasProfile = !!process.env.AWS_PROFILE && process.env.AWS_PROFILE.trim() !== '';
-  const hasKeys =
-    !!process.env.AWS_ACCESS_KEY_ID &&
-    process.env.AWS_ACCESS_KEY_ID.trim() !== '' &&
-    !!process.env.AWS_SECRET_ACCESS_KEY &&
-    process.env.AWS_SECRET_ACCESS_KEY.trim() !== '';
-  if (!hasProfile && !hasKeys) {
-    throw new Error(
-      'AWS 認証情報が未設定です: AWS_PROFILE もしくは AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY（必要に応じて AWS_SESSION_TOKEN）を設定してください',
-    );
-  }
-}
+import {
+  AwsSgEnforceInlineStack,
+  CloudflareStack,
+  GoogleStack,
+  loadGoogleConfig,
+  runCfAutoImport,
+  requireEnv,
+  ensureAwsAuth,
+  requireProjectConfig,
+} from '@minr-dev/cdktf-toolkit';
 
 async function main(): Promise<void> {
   const app = new App();
 
-  // 必須: ENVIRONMENT（dev|prod など）
-  const environment = requireEnv('ENVIRONMENT');
+  const projectConfig = requireProjectConfig();
+  const { environment, stack } = projectConfig;
 
-  // 必須: STACK（cloudflare | google | aws-sg-enforce-inline）
-  const stackTarget = requireEnv('STACK').toLowerCase();
-  if (!['cloudflare', 'google', 'aws-sg-enforce-inline'].includes(stackTarget)) {
-    throw new Error('STACK は "cloudflare", "google", もしくは "aws-sg-enforce-inline" を指定してください');
-  }
-
-  // terraform.<ENV>.tfvars（または terraform.tfvars）から必須キーの存在を検証
-  function validateTfvars(requiredKeys: string[]): void {
-    const primary = `terraform.${environment}.tfvars`;
-    const fallback = 'terraform.tfvars';
-    const tfvarsPath = fs.existsSync(primary) ? primary : fs.existsSync(fallback) ? fallback : undefined;
-    if (!tfvarsPath) {
-      throw new Error(`設定ファイルが見つかりません: ${primary} または ${fallback}`);
-    }
-    const content = fs.readFileSync(tfvarsPath, 'utf8');
-
-    // シンプルな tfvars パーサでキー存在と値を取得（ダブルクォートは除去される）
-    const kv: Record<string, string> = parseSimpleTfvars(content);
-    const missing: string[] = [];
-    const empty: string[] = [];
-    for (const k of requiredKeys) {
-      if (!(k in kv)) {
-        missing.push(k);
-      } else {
-        const v = (kv[k] ?? '').trim();
-        if (v === '') empty.push(k);
-      }
-    }
-    if (missing.length || empty.length) {
-      const parts: string[] = [];
-      if (missing.length) parts.push(`不足キー: ${missing.join(', ')}`);
-      if (empty.length) parts.push(`空文字のキー: ${empty.join(', ')}`);
-      throw new Error(`tfvars の検証に失敗しました (${tfvarsPath})。${parts.join(' / ')}`);
-    }
-  }
-
-  if (stackTarget === 'cloudflare') {
-    validateTfvars([
+  if (stack === 'cloudflare') {
+    projectConfig.ensureTfvarsKeys([
       'cloudflare_api_token',
       'cloudflare_account_id',
       'domain_name',
@@ -88,8 +31,8 @@ async function main(): Promise<void> {
     new LocalBackend(cf, { path: `./terraform-state/${cf.node.id}/${environment}/terraform.tfstate` });
   }
 
-  if (stackTarget === 'google') {
-    validateTfvars([
+  if (stack === 'google') {
+    projectConfig.ensureTfvarsKeys([
       'google_project_id',
       'cloudflare_team_domain',
       'domain_name',
@@ -105,7 +48,7 @@ async function main(): Promise<void> {
     new LocalBackend(google, { path: `./terraform-state/${google.node.id}/${environment}/terraform.tfstate` });
   }
 
-  if (stackTarget === 'aws-sg-enforce-inline') {
+  if (stack === 'aws-sg-enforce-inline') {
     requireEnv('SG_ID');
     ensureAwsAuth();
 
@@ -124,8 +67,8 @@ async function main(): Promise<void> {
   // 方法:
   //   - 合成直後の cdk.tf.json を基に、URL（=サブドメイン）完全一致で Access アプリを特定し、state に import。
   //   - DNS レコードについても同様に既存実体を特定・import して整合性を確保。
-  if (stackTarget === 'cloudflare') {
-    await runCfAutoImport();
+  if (stack === 'cloudflare') {
+    await runCfAutoImport({ environment });
   }
 }
 

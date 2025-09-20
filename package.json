@@ -1,7 +1,7 @@
 {
-  "name": "cdktf-project",
+  "name": "@minr-dev/galileo-wp-iac",
   "version": "1.0.0",
-  "description": "CDK for Terraform project with best practices",
+  "description": "Galileo WordPress インフラ向け CDKTF プロジェクト",
   "main": "lib/main.js",
   "scripts": {
     "get": "cdktf get",
@@ -26,7 +26,7 @@
     "clean:state": "rm -rf cdktf.out terraform.*.tfstate* || true",
     "clean:cache": "rm -rf node_modules/.cache lib dist",
     "reset": "npm run clean && npm install && npm run get",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint . --ext .ts",
@@ -49,13 +49,13 @@
     "jest": "^29.5.0",
     "prettier": "^2.8.7",
     "ts-jest": "^29.1.0",
-    "ts-node": "^10.9.2",
     "typescript": "^5.0.2"
   },
   "dependencies": {
     "@cdktf/provider-aws": "21.9.1",
     "@cdktf/provider-cloudflare": "13.4.0",
     "@cdktf/provider-http": "^10.0.0",
+    "@minr-dev/cdktf-toolkit": "file:../cdktf-toolkit",
     "cdktf": "0.21.0",
     "constructs": "^10.3.0"
   }

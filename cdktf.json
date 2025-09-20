@@ -1,7 +1,7 @@
 {
   "language": "typescript",
   "app": "npm run --silent build && node lib/main.js",
-  "projectId": "cdktf-project",
+  "projectId": "galileo-wp-iac",
   "terraformProviders": [],
   "terraformModules": [],
   "context": {

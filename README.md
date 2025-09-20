@@ -1,172 +1,88 @@
-# 🚀 CDK for Terraform - Boilerplate
+# Galileo WordPress IaC
 
-CDK for Terraform 開発環境をワンクリックで構築できるボイラープレートです。
+Galileo WordPress プロジェクト向けの CDK for Terraform (CDKTF) 構成一式です。Cloudflare / Google Workspace / AWS などのスタックを組み合わせ、`@minr-dev/cdktf-toolkit` ライブラリに切り出した共通コンポーネントを利用します。
 
-[![CI](https://github.com/minr-dev/cdktf-boilerplate/workflows/CI/badge.svg)](https://github.com/minr-dev/cdktf-boilerplate/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CDKTF Version](https://img.shields.io/badge/CDKTF-0.19.0-blue.svg)](https://github.com/hashicorp/terraform-cdk)
-
-## ✨ 特徴
-
-- 🐳 **VSCode DevContainer**: ワンクリックで完全な開発環境を構築
-- 🧪 **テスト統合**: Jest + カバレッジレポート + スナップショットテスト
-- 📝 **コード品質**: ESLint + Prettier + TypeScript 厳格設定
-- 🔄 **CI/CD**: GitHub Actions 自動テスト・デプロイ
-- 🛡️ **セキュリティ**: 依存関係スキャン + 脆弱性チェック
-- 📁 **構造**: スケーラブルなフォルダ構成
-
-## 🚀 クイックスタート
-
-### 前提条件
-
-- [Docker](https://www.docker.com/)
-- [VS Code](https://code.visualstudio.com/)
-- [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-
-### セットアップ
-
-1. **リポジトリクローン**
-
-   ```bash
-   git clone https://github.com/minr-dev/cdktf-boilerplate.git
-   cd cdktf-boilerplate
-   ```
-
-2. **VS Code DevContainer 起動**
-
-   ```bash
-   code .
-   # Command Palette (Ctrl+Shift+P) → "Dev Containers: Reopen in Container"
-   ```
-
-3. **設定ファイル作成**
-
-   ```bash
-   cp terraform.tfvars.example terraform.tfvars
-   # terraform.tfvarsを編集して実際の値を設定
-   ```
-
-4. **開発開始** 🎉
-   ```bash
-   npm run build         # プロジェクトビルド
-   npm run synth:prod    # Terraform設定ファイル生成
-   npm run deploy:prod   # インフラストラクチャデプロイ
-   ```
-
-## 📁 プロジェクト構造
+## リポジトリ構成
 
 ```
-├── .devcontainer/          # DevContainer設定
-├── src/                   # ソースコード
-│   ├── main.ts           # エントリーポイント
-│   ├── stacks/           # CDKTFスタック
-│   └── constructs/       # 再利用可能コンポーネント
-├── tests/                # テストファイル
-├── docs/                 # ドキュメント
-└── terraform.tfvars.example  # 設定ファイルテンプレート
+projects/
+├── galileo-wp-iac        # 本プロジェクト（環境変数とスタック選択を担う）
+└── cdktf-toolkit         # 共通ライブラリ（file 依存として参照）
 ```
 
-## 🛠️ 開発コマンド
+- リポジトリ内では `galileo-wp-iac` と `cdktf-toolkit` が隣接するディレクトリとして配置されます。
+- `package.json` では `"@minr-dev/cdktf-toolkit": "file:../cdktf-toolkit"` と定義しているため、`npm install` 時にローカルディレクトリが解決されます。
+
+## 事前準備
+
+1. **依存ディレクトリの配置**
+   - モノレポ利用時は `projects/cdktf-toolkit` が既に存在します。
+   - `galileo-wp-iac` を単独利用する場合は、同階層に `cdktf-toolkit` をクローンまたはサブモジュールとして配置してください。
+
+     ```bash
+     git clone git@github.com:your-org/cdktf-toolkit.git ../cdktf-toolkit
+     ```
+
+2. **Docker 環境変数の設定**
+   - `.env.example` を参考に `projects/galileo-wp-iac/.env` を作成し、AWS や Cloudflare の資格情報を記載します。
+
+3. **tfvars ファイルの作成**
+   - `terraform.tfvars.example` をコピーし、環境ごとの値を設定します。
+
+## 開発環境の起動
 
 ```bash
-# 基本操作
-npm run build        # TypeScriptビルド
-npm run watch        # ファイル変更を監視してビルド
-npm run get          # Terraformプロバイダー取得
+# Docker Compose で CDKTF 用コンテナを起動
+cd projects/galileo-wp-iac
+docker compose up -d
 
-# CDKTF操作
-npm run synth        # Terraform設定ファイル生成
-npm run deploy       # インフラデプロイ
-npm run destroy      # インフラ削除
-npm run diff         # 変更差分表示
+# コンテナ内シェルへ接続
+docker compose exec cdktf bash
 
-# テスト・品質管理
-npm test             # テスト実行
-npm run test:coverage # カバレッジレポート生成
-npm run lint         # ESLintチェック
-npm run format       # Prettierフォーマット
-npm run pre-commit   # コミット前チェック
+# 依存パッケージの取得（ローカル file 依存が解決される）
+npm install
 ```
 
-## 🏗️ サンプル実装
+`docker-compose.yml` では `../cdktf-toolkit` をコンテナ内にもマウントしているため、単独運用時でもローカルパッケージを参照できます。
 
-このボイラープレートには、**Cloudflare Zero Trust** を使用したセキュアな Web アプリケーション構成のサンプルが含まれています。
-
-- Google OAuth 認証によるアクセス制御
-- Cloudflare プロキシ経由の HTTPS 通信
-- AWS セキュリティグループの自動管理
-
-詳細は [サンプル実装ドキュメント](./docs/SAMPLE_DEPLOYMENT.md) を参照してください。
-
-## 🧪 テスト
+## よく使うコマンド
 
 ```bash
-# 全テスト実行
-npm test
+npm run get        # プロバイダコード生成
+npm run build      # TypeScript ビルド
+npm run synth      # Terraform 定義を生成
+npm run plan       # 変更差分を確認
+npm run deploy     # スタックをデプロイ
+npm run destroy    # スタックを破棄
 
-# 特定のテストファイル実行
-npm test -- --testPathPattern=stack.test.ts
-
-# カバレッジレポート生成
-npm run test:coverage
+npm run lint       # ESLint チェック
+npm test           # Jest テスト
 ```
 
-## 🔧 VS Code 統合
+環境別に実行する場合は `ENVIRONMENT` と `STACK` を指定します。
 
-### タスク実行
+```bash
+ENVIRONMENT=dev STACK=cloudflare npm run plan
+```
 
-- `Ctrl+Shift+P` → `Tasks: Run Task`
-- CDKTF Deploy/Destroy/Synth が選択可能
+## ディレクトリ概要
 
-### デバッグ
+- `src/main.ts` : `ENVIRONMENT` と `STACK` の組み合わせに応じて CDKTF スタックを組み立てるエントリポイント
+- `src/stacks/` : プロジェクト固有のスタック（Cloudflare、Google、AWS など）
+- `src/constructs/` : 再利用可能な Construct 群
+- `src/shared/` : tfvars ローダーや環境変数検証ヘルパー
+- `docker/` : CDKTF 開発用コンテナの Dockerfile
+- `docs/` : スタックごとの仕様や運用メモ
 
-- `F5` でデバッグ開始
-- ブレークポイント設定可能
+## 開発フロー
 
-## 🔄 CI/CD
+1. `npm install` 実行後、`npm run get` でプロバイダコードを生成
+2. `ENVIRONMENT` と `STACK` を設定して `npm run plan`/`deploy`
+3. 変更内容がある場合は `docs/decisions` や `docs/iac-library-split-spec.md` を更新
+4. 共通化したい機能は `projects/cdktf-toolkit` 側へ移設し、`npm install` でローカル依存を反映
 
-プッシュ・プルリクエスト時に自動実行：
+## 参考リンク
 
-- ✅ ESLint + Prettier チェック
-- ✅ テスト実行 + カバレッジ
-- ✅ セキュリティスキャン
-- ✅ CDKTF Synth 検証
-
-## 🤝 貢献
-
-1. フォーク
-2. フィーチャーブランチ作成 (`git checkout -b feature/amazing-feature`)
-3. 変更をコミット (`git commit -m 'Add amazing feature'`)
-4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
-5. プルリクエスト作成
-
-### 開発ガイドライン
-
-- TypeScript の厳格モードを使用
-- テストカバレッジ 80%以上を維持
-- ESLint + Prettier ルールに従う
-- コミット前に `npm run pre-commit` を実行
-
-## 📚 ドキュメント
-
-- [📊 公式テンプレートとの比較](./docs/COMPARISON.md)
-- [📖 サンプル実装ガイド](./docs/SAMPLE_DEPLOYMENT.md)
-- [☁️ Cloudflare インポートガイド](./docs/CLOUDFLARE_IMPORT.md)
-
-## 🔗 関連リンク
-
-- [CDK for Terraform 公式ドキュメント](https://developer.hashicorp.com/terraform/cdktf)
-- [Cloudflare Zero Trust](https://developers.cloudflare.com/cloudflare-one/)
-- [Terraform Provider Registry](https://registry.terraform.io/browse/providers)
-
-## 📝 ライセンス
-
-[MIT License](LICENSE) - 詳細は[LICENSE](LICENSE)ファイルを参照
-
-## ✨ 謝辞
-
-このボイラープレートは以下をベースに構築されています：
-
-- [HashiCorp Terraform CDK](https://github.com/hashicorp/terraform-cdk)
-- [AWS CDK best practices](https://docs.aws.amazon.com/cdk/v2/guide/best-practices.html)
-- [TypeScript community standards](https://github.com/microsoft/TypeScript)
+- [CDK for Terraform](https://developer.hashicorp.com/terraform/cdktf)
+- [Terraform Registry: Cloudflare Provider](https://registry.terraform.io/providers/cloudflare/cloudflare/latest)
+- `docs/decisions/0006-infrastructure-split-iac-library-and-main.md`

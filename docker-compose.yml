@@ -10,6 +10,7 @@ services:
         - GROUPNAME=${GROUPNAME}
     volumes:
       - .:/workspace:cached
+      - ../cdktf-toolkit:/workspace/../cdktf-toolkit:cached
       - cdktf_node_modules:/workspace/node_modules
     env_file: .env
 
