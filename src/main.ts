@@ -1,40 +1,50 @@
 import { App, LocalBackend } from 'cdktf';
-import {
-  AwsSgEnforceInlineStack,
-  CloudflareZeroTrustStack,
-  CLOUDFLARE_ORIGIN_TYPE,
-  runCfAutoImport,
-  requireEnv,
-  ensureAwsAuth,
-} from '@minr-dev/cdktf-toolkit';
+import { AwsS3MediaStack, CloudflareMediaStack, requireProjectConfig, ensureAwsAuth } from '@minr-dev/cdktf-toolkit';
 
-async function main(): Promise<void> {
+/**
+ * galileo-wp-iac プロジェクト固有のメイン実行フロー
+ *
+ * WordPress S3 Media Offload用インフラを以下の順序でデプロイ:
+ * 1. AWS S3 Media Stack: S3バケット、CloudFront、IAMリソース
+ * 2. Cloudflare Media Stack: CDN配信用DNS、TLS設定
+ *
+ * 環境は実行時のディレクトリまたはコマンドライン引数で指定
+ */
+function main(): void {
   const app = new App();
-  const environment = requireEnv('ENVIRONMENT');
 
-  // 2. Cloudflareスタック（HTTPオリジン用）
-  const cf = new CloudflareZeroTrustStack(app, 'cloudflare', {
+  // 環境を引数またはデフォルトから決定
+  const environment = process.argv[2] || 'dev';
+  console.log(`Environment: ${environment}`);
+
+  // プロジェクト設定の検証
+  requireProjectConfig(environment);
+
+  // AWS認証確認
+  ensureAwsAuth();
+
+  // 1. AWS S3 Media スタック
+  const awsS3MediaStack = new AwsS3MediaStack(app, 'aws-s3-media-stack', {
     environment,
-    originType: CLOUDFLARE_ORIGIN_TYPE.HTTP
+    priceClass: 'PriceClass_200', // アジア・パシフィック地域最適化
   });
-  new LocalBackend(cf, { path: `./terraform-state/${cf.node.id}/${environment}/terraform.tfstate` });
+  new LocalBackend(awsS3MediaStack, {
+    path: `./terraform/${awsS3MediaStack.node.id}/${environment}/terraform.tfstate`,
+  });
 
-  // 3. AWS Security Group設定スタック（必要に応じて）
-  const sgId = process.env.SG_ID;
-  if (sgId) {
-    ensureAwsAuth();
-    const enforce = new AwsSgEnforceInlineStack(app, 'aws-sg-enforce-inline');
-    new LocalBackend(enforce, { path: `./terraform-state/${enforce.node.id}/${environment}/terraform.tfstate` });
-  }
+  // 2. Cloudflare Media スタック（AWS S3 Media Stackの出力値を使用）
+  const cloudflareMediaStack = new CloudflareMediaStack(app, 'cloudflare-media-stack', {
+    environment,
+    cloudfrontDomainName: awsS3MediaStack.cloudfrontDomainName,
+    acmValidationRecords: awsS3MediaStack.acmValidationRecords,
+  });
+  new LocalBackend(cloudflareMediaStack, {
+    path: `./terraform/${cloudflareMediaStack.node.id}/${environment}/terraform.tfstate`,
+  });
 
   app.synth();
-
-  // 4. Cloudflare自動インポート実行
-  await runCfAutoImport({ environment });
 }
 
-// 実行
-main().catch(e => {
-  console.error(String(e instanceof Error ? e.message : e));
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main();
+}
