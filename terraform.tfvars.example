@@ -12,9 +12,6 @@ domain_name = "example.com"
 # S3バケット名（グローバルで一意である必要があります）
 s3_bucket = "example-media-dev"
 
-# AWSリージョン
-aws_region = "ap-northeast-1"
-
 # CDNドメイン名（アプリケーションがメディアファイルにアクセスするURL）
 # 例: dev環境 = "cdn-dev.example.com", prod環境 = "cdn.example.com"
 cdn_domain = "cdn-dev.example.com"
