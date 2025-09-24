@@ -1,21 +1,5 @@
-# WordPress S3 Media Offload インフラ設定
+# Galileo インフラ設定
 
 # Cloudflare configuration
 cloudflare_api_token = "your-cloudflare-api-token-here"
 cloudflare_account_id = "your-cloudflare-account-id-here"
-
-# Domain configuration
-# ベースドメイン名（Cloudflareで管理しているドメイン）
-domain_name = "example.com"
-
-# S3 Media configuration
-# S3バケット名（グローバルで一意である必要があります）
-s3_bucket = "example-media-dev"
-
-# CDNドメイン名（アプリケーションがメディアファイルにアクセスするURL）
-# 例: dev環境 = "cdn-dev.example.com", prod環境 = "cdn.example.com"
-cdn_domain = "cdn-dev.example.com"
-
-# アプリケーション オリジンドメイン名（HTTPS想定）
-# アプリケーションサイト自体のドメイン
-origin_domain = "app-dev.example.com"

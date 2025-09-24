@@ -1,4 +1,4 @@
-import { App, LocalBackend } from 'cdktf';
+import { App, S3Backend } from 'cdktf';
 import { AwsS3MediaStack, CloudflareMediaStack, requireProjectConfig, ensureAwsAuth } from '@minr-dev/cdktf-toolkit';
 
 /**
@@ -11,36 +11,71 @@ import { AwsS3MediaStack, CloudflareMediaStack, requireProjectConfig, ensureAwsA
  * 環境は実行時のディレクトリまたはコマンドライン引数で指定
  */
 function main(): void {
-  const app = new App();
-
   // 環境を引数またはデフォルトから決定
   const environment = process.argv[2] || 'dev';
   console.log(`Environment: ${environment}`);
 
+  const app = new App();
+
   // プロジェクト設定の検証
-  requireProjectConfig(environment);
+  const projectConfig = requireProjectConfig(environment);
 
   // AWS認証確認
   ensureAwsAuth();
 
+  // S3Backend（TerraformのステートをS3に保持）用の設定
+  const stateBucket = "galileo-rent-terraform-state";
+  const stateDynamodbTable = "galileo-rent-terraform-lock";
+  const stateRegion = process.env.AWS_REGION || 'ap-northeast-1';
+  const stateKeyPrefix = 'galileo-rent';
+
+  const backendKeyFor = (stackId: string) => `${stateKeyPrefix}/${environment}/${stackId}.tfstate`;
+
+  const configureRemoteState = (stack: AwsS3MediaStack | CloudflareMediaStack, stackId: string) => {
+    new S3Backend(stack, {
+      bucket: stateBucket,
+      key: backendKeyFor(stackId),
+      region: stateRegion,
+      dynamodbTable: stateDynamodbTable,
+      encrypt: true,
+    });
+  };
+
+  let baseDomain: string;
+  let subDomain: string;
+  if (environment === 'prod') {
+    baseDomain = 'galileo.rent';
+    subDomain = 'galileo.rent';
+  } else if (environment === 'dev'){
+    baseDomain = `a5g.io`;
+    subDomain = 'galileo-cdn-dev2';
+  } else {
+    throw new Error(`不明な値です: ${environment}`);
+  }
+
   // 1. AWS S3 Media スタック
   const awsS3MediaStack = new AwsS3MediaStack(app, 'aws-s3-media-stack', {
     environment,
-    priceClass: 'PriceClass_200', // アジア・パシフィック地域最適化
+    bucketName: `galileo-rent-media-${environment}`,
+    cdnDomain: `${subDomain}.${baseDomain}`,
+    awsRegion: process.env.AWS_REGION || 'ap-northeast-1',
+    iamPolicyName: `GalileoRentMediaPolicy-${environment}`,
+    iamUserName: `galileo-rent-media-user-${environment}`,
   });
-  new LocalBackend(awsS3MediaStack, {
-    path: `./terraform/${awsS3MediaStack.node.id}/${environment}/terraform.tfstate`,
-  });
+  configureRemoteState(awsS3MediaStack, 'aws-s3-media-stack');
 
   // 2. Cloudflare Media スタック（AWS S3 Media Stackの出力値を使用）
   const cloudflareMediaStack = new CloudflareMediaStack(app, 'cloudflare-media-stack', {
     environment,
+    domainName: baseDomain,
+    subDomainName: subDomain,
     cloudfrontDomainName: awsS3MediaStack.cloudfrontDomainName,
-    acmValidationRecords: awsS3MediaStack.acmValidationRecords,
+    acmValidationRecord: awsS3MediaStack.acmValidationRecord,
   });
-  new LocalBackend(cloudflareMediaStack, {
-    path: `./terraform/${cloudflareMediaStack.node.id}/${environment}/terraform.tfstate`,
-  });
+  configureRemoteState(cloudflareMediaStack, 'cloudflare-media-stack');
+
+  // スタック間の依存関係を明示的に定義
+  cloudflareMediaStack.addDependency(awsS3MediaStack);
 
   app.synth();
 }

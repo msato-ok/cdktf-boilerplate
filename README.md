@@ -15,7 +15,11 @@ projects/
 
 ## 事前準備
 
-1. **依存ディレクトリの配置**
+1. **AWSリモートステートの準備**
+   - **初回セットアップ時は必須**: Terraformステート管理用のS3バケットとDynamoDBテーブルを作成
+   - 詳細手順: **[docs/AWS_REMOTE_STATE_SETUP.md](docs/AWS_REMOTE_STATE_SETUP.md)** を参照
+
+2. **依存ディレクトリの配置**
    - モノレポ利用時は `projects/cdktf-toolkit` が既に存在します。
    - `galileo-wp-iac` を単独利用する場合は、同階層に `cdktf-toolkit` をクローンまたはサブモジュールとして配置してください。
 
@@ -23,10 +27,10 @@ projects/
      git clone git@github.com:your-org/cdktf-toolkit.git ../cdktf-toolkit
      ```
 
-2. **Docker 環境変数の設定**
+3. **Docker 環境変数の設定**
    - `.env.example` を参考に `projects/galileo-wp-iac/.env` を作成し、AWS や Cloudflare の資格情報を記載します。
 
-3. **tfvars ファイルの作成**
+4. **tfvars ファイルの作成**
    - `terraform.tfvars.example` をコピーし、環境ごとの値を設定します。
 
 ## 開発環境の起動
