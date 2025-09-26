@@ -4,10 +4,10 @@ services:
       context: .
       dockerfile: docker/cdktf/Dockerfile
       args:
-        - UID=${UID}
-        - GID=${GID}
-        - USERNAME=${USERNAME}
-        - GROUPNAME=${GROUPNAME}
+        - USER_UID=${USER_UID}
+        - USER_GID=${USER_GID}
+        - USER_NAME=${USER_NAME}
+        - USER_GROUP=${USER_GROUP}
     volumes:
       - .:/workspace:cached
       - ../cdktf-toolkit:/workspace/../cdktf-toolkit:cached

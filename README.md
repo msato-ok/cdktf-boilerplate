@@ -15,11 +15,13 @@ projects/
 
 ## 事前準備
 
-1. **AWSリモートステートの準備**
-   - **初回セットアップ時は必須**: Terraformステート管理用のS3バケットとDynamoDBテーブルを作成
+1. **AWS リモートステートの準備**
+
+   - **初回セットアップ時は必須**: Terraform ステート管理用の S3 バケットと DynamoDB テーブルを作成
    - 詳細手順: **[docs/AWS_REMOTE_STATE_SETUP.md](docs/AWS_REMOTE_STATE_SETUP.md)** を参照
 
 2. **依存ディレクトリの配置**
+
    - モノレポ利用時は `projects/cdktf-toolkit` が既に存在します。
    - `galileo-wp-iac` を単独利用する場合は、同階層に `cdktf-toolkit` をクローンまたはサブモジュールとして配置してください。
 
@@ -27,11 +29,17 @@ projects/
      git clone git@github.com:your-org/cdktf-toolkit.git ../cdktf-toolkit
      ```
 
-3. **Docker 環境変数の設定**
-   - `.env.example` を参考に `projects/galileo-wp-iac/.env` を作成し、AWS や Cloudflare の資格情報を記載します。
-
-4. **tfvars ファイルの作成**
-   - `terraform.tfvars.example` をコピーし、環境ごとの値を設定します。
+3. **ランタイム環境変数の設計指針**
+   - **設定はすべて環境変数で統一**します（`.tfvars` は原則使用しません）。
+   - 非機密値は通常の環境変数で設定します。
+     - `.env.example` をベースに `.env` を作成してください。
+     - 代表例: `BASE_DOMAIN_DEV/PROD`, `SUB_DOMAIN_DEV/PROD`, `S3_MEDIA_BUCKET_NAME_DEV/PROD`, `IAM_POLICY_NAME_DEV/PROD`, `IAM_USER_NAME_DEV/PROD`。
+     - AWS 認証情報やリージョンなどもこの方式で設定します。
+   - 機密値は `TF_VAR_<variable>` 形式の環境変数に限定します。
+     - 例: `export TF_VAR_cloudflare_api_token=...`。
+     - Cloudflare API Token や Google OAuth Secret などの特権情報はこの形式で渡してください。
+   - 通常の環境変数を使わない理由
+     例えば、TerraformStack や Construct の Props などで受け渡す実装をしてしまいガチですが、その場合には、cdk.tf.json に平文で出力されてしまいます。Terraform の state は、ローカルでの実行や CD/CI での実行など、実行環境が違う場合を想定して、リモートで state 管理するため、セキュリティ上のリスクになります。
 
 ## 開発環境の起動
 
@@ -69,12 +77,18 @@ npm test           # Jest テスト
 ENVIRONMENT=dev STACK=cloudflare npm run plan
 ```
 
+### 環境変数設定のガイド
+
+- 機密値（Cloudflare API Token など）は `export TF_VAR_cloudflare_api_token=...` のように **`TF_VAR_` プレフィックス付きの環境変数** で渡します。
+- 非機密な環境固有値も通常の環境変数で管理します（例: `BASE_DOMAIN_DEV/PROD`, `SUB_DOMAIN_DEV/PROD`, `S3_MEDIA_BUCKET_NAME_DEV/PROD`, `IAM_POLICY_NAME_DEV/PROD`, `IAM_USER_NAME_DEV/PROD`）。
+- CDKTF の TypeScript 側から値を参照したいケースでも、基本は `process.env` に設定した同じ環境変数を利用します。
+
 ## ディレクトリ概要
 
 - `src/main.ts` : `ENVIRONMENT` と `STACK` の組み合わせに応じて CDKTF スタックを組み立てるエントリポイント
 - `src/stacks/` : プロジェクト固有のスタック（Cloudflare、Google、AWS など）
 - `src/constructs/` : 再利用可能な Construct 群
-- `src/shared/` : tfvars ローダーや環境変数検証ヘルパー
+- `src/shared/` : 環境変数・秘密値ラッパー (`EnvironmentConfig`) などの共通ユーティリティ
 - `docker/` : CDKTF 開発用コンテナの Dockerfile
 - `docs/` : スタックごとの仕様や運用メモ
 

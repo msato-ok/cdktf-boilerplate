@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Change to the project directory and source .env
+cd "$(dirname "$0")/.."
+if [[ -f .env ]]; then
+  source .env
+fi
+
 # Usage:
 #   scripts/deploy.sh [options]
 # Options:
@@ -78,8 +84,8 @@ if uses_local_toolkit_dependency; then
 fi
 
 # Check required files
-if [[ ! -f "terraform.${ENVIRONMENT}.tfvars" && ! -f "terraform.tfvars" ]]; then
-  echo "❌ Error: terraform.${ENVIRONMENT}.tfvars or terraform.tfvars not found" >&2
+if [[ ! -f "terraform.tfvars" ]]; then
+  echo "❌ Error: terraform.tfvars not found" >&2
   exit 1
 fi
 

@@ -1,16 +1,16 @@
 FROM node:20-bullseye AS base
 
 # Allow caller to override the runtime user/group via build args
-ARG UID=1000
-ARG GID=1000
-ARG USERNAME=node
-ARG GROUPNAME=node
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG USER_NAME=node
+ARG USER_GROUP=node
 
 # Expose selected build args as environment vars for later stages and runtime
-ENV USER_UID=${UID}
-ENV USER_GID=${GID}
-ENV USER_NAME=${USERNAME}
-ENV USER_GROUP=${GROUPNAME}
+ENV USER_UID=${USER_UID}
+ENV USER_GID=${USER_GID}
+ENV USER_NAME=${USER_NAME}
+ENV USER_GROUP=${USER_GROUP}
 
 # Base image with common OS-level tools and user setup
 

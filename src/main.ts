@@ -1,5 +1,10 @@
 import { App, S3Backend } from 'cdktf';
-import { AwsS3MediaStack, CloudflareMediaStack, requireProjectConfig, ensureAwsAuth } from '@minr-dev/cdktf-toolkit';
+import {
+  AwsS3MediaStack,
+  CloudflareMediaStack,
+  ensureAwsAuth,
+  requireEnv,
+} from '@minr-dev/cdktf-toolkit';
 
 /**
  * galileo-wp-iac プロジェクト固有のメイン実行フロー
@@ -10,15 +15,48 @@ import { AwsS3MediaStack, CloudflareMediaStack, requireProjectConfig, ensureAwsA
  *
  * 環境は実行時のディレクトリまたはコマンドライン引数で指定
  */
+interface ProjectConfig {
+  environment: 'prod' | 'dev';
+  awsRegion: string;
+  baseDomain: string;
+  subDomain: string;
+  bucketName: string;
+  iamPolicyName: string;
+  iamUserName: string;
+}
+
+const ENVIRONMENTS = {
+  PROD: 'prod',
+  DEV: 'dev',
+} as const;
+type ENVIRONMENTS = typeof ENVIRONMENTS[keyof typeof ENVIRONMENTS];
+
+function buildProjectConfig(): ProjectConfig {
+  const environmentValue = requireEnv('ENVIRONMENT');
+  const environment = environmentValue as ENVIRONMENTS;
+  const validEnvironments = new Set(Object.values(ENVIRONMENTS));
+  if (!validEnvironments.has(environment)) {
+    throw new Error(`不明な環境です: ${environmentValue}`);
+  }
+
+  return {
+    environment,
+    awsRegion: requireEnv('AWS_REGION'),
+    baseDomain: requireEnv('S3_MEDIA_CDN_DOMAIN'),
+    subDomain: requireEnv('S3_MEDIA_CDN_SUBDOMAIN'),
+    bucketName: requireEnv('S3_MEDIA_BUCKET_NAME'),
+    iamPolicyName: `GalileoRentMediaPolicy-${environment}`,
+    iamUserName: `galileo-rent-media-user-${environment}`,
+  };
+}
+
 function main(): void {
-  // 環境を引数またはデフォルトから決定
-  const environment = process.argv[2] || 'dev';
+  const projectConfig = buildProjectConfig();
+  const { environment } = projectConfig;
   console.log(`Environment: ${environment}`);
 
   const app = new App();
 
-  // プロジェクト設定の検証
-  const projectConfig = requireProjectConfig(environment);
 
   // AWS認証確認
   ensureAwsAuth();
@@ -26,7 +64,7 @@ function main(): void {
   // S3Backend（TerraformのステートをS3に保持）用の設定
   const stateBucket = "galileo-rent-terraform-state";
   const stateDynamodbTable = "galileo-rent-terraform-lock";
-  const stateRegion = process.env.AWS_REGION || 'ap-northeast-1';
+  const stateRegion = projectConfig.awsRegion;
   const stateKeyPrefix = 'galileo-rent';
 
   const backendKeyFor = (stackId: string) => `${stateKeyPrefix}/${environment}/${stackId}.tfstate`;
@@ -41,26 +79,17 @@ function main(): void {
     });
   };
 
-  let baseDomain: string;
-  let subDomain: string;
-  if (environment === 'prod') {
-    baseDomain = 'galileo.rent';
-    subDomain = 'galileo.rent';
-  } else if (environment === 'dev'){
-    baseDomain = `a5g.io`;
-    subDomain = 'galileo-cdn-dev2';
-  } else {
-    throw new Error(`不明な値です: ${environment}`);
-  }
+  const { baseDomain, subDomain } = projectConfig;
+  const cdnDomain = `${subDomain}.${baseDomain}`;
 
   // 1. AWS S3 Media スタック
   const awsS3MediaStack = new AwsS3MediaStack(app, 'aws-s3-media-stack', {
     environment,
-    bucketName: `galileo-rent-media-${environment}`,
-    cdnDomain: `${subDomain}.${baseDomain}`,
-    awsRegion: process.env.AWS_REGION || 'ap-northeast-1',
-    iamPolicyName: `GalileoRentMediaPolicy-${environment}`,
-    iamUserName: `galileo-rent-media-user-${environment}`,
+    bucketName: projectConfig.bucketName,
+    cdnDomain,
+    awsRegion: projectConfig.awsRegion,
+    iamPolicyName: projectConfig.iamPolicyName,
+    iamUserName: projectConfig.iamUserName,
   });
   configureRemoteState(awsS3MediaStack, 'aws-s3-media-stack');
 
