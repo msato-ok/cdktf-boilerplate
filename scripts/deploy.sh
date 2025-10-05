@@ -4,7 +4,10 @@ set -euo pipefail
 # Change to the project directory and source .env
 cd "$(dirname "$0")/.."
 if [[ -f .env ]]; then
+  set -a
   source .env
+  set +a
+  echo "🔧 Loaded environment variables from .env"
 fi
 
 # Usage:
@@ -81,12 +84,6 @@ if uses_local_toolkit_dependency; then
     cd "$local_toolkit_path"
     npm run $NPM_SILENT build
   )
-fi
-
-# Check required files
-if [[ ! -f "terraform.tfvars" ]]; then
-  echo "❌ Error: terraform.tfvars not found" >&2
-  exit 1
 fi
 
 echo ""
