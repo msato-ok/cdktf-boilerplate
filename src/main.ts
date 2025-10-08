@@ -2,9 +2,16 @@ import { App, S3Backend } from 'cdktf';
 import {
   AwsS3MediaStack,
   CloudflareMediaStack,
+  StaticContentStack,
+  QueueStack,
+  WorkerStack,
+  CloudflareZoneStack,
+  MonitoringStack,
+  WranglerConfigStack,
+  TurnstileStack,
   ensureAwsAuth,
-  requireEnv,
 } from '@minr-dev/cdktf-toolkit';
+import { buildProjectConfig } from './config';
 
 /**
  * galileo-wp-iac プロジェクト固有のメイン実行フロー
@@ -15,40 +22,6 @@ import {
  *
  * 環境は実行時のディレクトリまたはコマンドライン引数で指定
  */
-interface ProjectConfig {
-  environment: 'prod' | 'dev';
-  awsRegion: string;
-  baseDomain: string;
-  subDomain: string;
-  bucketName: string;
-  iamPolicyName: string;
-  iamUserName: string;
-}
-
-const ENVIRONMENTS = {
-  PROD: 'prod',
-  DEV: 'dev',
-} as const;
-type ENVIRONMENTS = typeof ENVIRONMENTS[keyof typeof ENVIRONMENTS];
-
-function buildProjectConfig(): ProjectConfig {
-  const environmentValue = requireEnv('ENVIRONMENT');
-  const environment = environmentValue as ENVIRONMENTS;
-  const validEnvironments = new Set(Object.values(ENVIRONMENTS));
-  if (!validEnvironments.has(environment)) {
-    throw new Error(`不明な環境です: ${environmentValue}`);
-  }
-
-  return {
-    environment,
-    awsRegion: requireEnv('AWS_REGION'),
-    baseDomain: requireEnv('S3_MEDIA_CDN_DOMAIN'),
-    subDomain: requireEnv('S3_MEDIA_CDN_SUBDOMAIN'),
-    bucketName: requireEnv('S3_MEDIA_BUCKET_NAME'),
-    iamPolicyName: `GalileoRentMediaPolicy-${environment}`,
-    iamUserName: `galileo-rent-media-user-${environment}`,
-  };
-}
 
 function main(): void {
   const projectConfig = buildProjectConfig();
@@ -57,19 +30,29 @@ function main(): void {
 
   const app = new App();
 
-
   // AWS認証確認
   ensureAwsAuth();
 
   // S3Backend（TerraformのステートをS3に保持）用の設定
-  const stateBucket = "galileo-rent-terraform-state";
-  const stateDynamodbTable = "galileo-rent-terraform-lock";
+  const stateBucket = 'galileo-rent-terraform-state';
+  const stateDynamodbTable = 'galileo-rent-terraform-lock';
   const stateRegion = projectConfig.awsRegion;
   const stateKeyPrefix = 'galileo-rent';
 
-  const backendKeyFor = (stackId: string) => `${stateKeyPrefix}/${environment}/${stackId}.tfstate`;
+  const backendKeyFor = (stackId: string): string => `${stateKeyPrefix}/${environment}/${stackId}.tfstate`;
 
-  const configureRemoteState = (stack: AwsS3MediaStack | CloudflareMediaStack, stackId: string) => {
+  const configureRemoteState = (
+    stack:
+      | AwsS3MediaStack
+      | CloudflareMediaStack
+      | StaticContentStack
+      | QueueStack
+      | WorkerStack
+      | CloudflareZoneStack
+      | MonitoringStack
+      | WranglerConfigStack,
+    stackId: string,
+  ): void => {
     new S3Backend(stack, {
       bucket: stateBucket,
       key: backendKeyFor(stackId),
@@ -79,15 +62,15 @@ function main(): void {
     });
   };
 
-  const { baseDomain, subDomain } = projectConfig;
-  const cdnDomain = `${subDomain}.${baseDomain}`;
+  const cdnFqdn = `${projectConfig.cdnSubDomain}.${projectConfig.cdnBaseDomain}`;
 
   // 1. AWS S3 Media スタック
   const awsS3MediaStack = new AwsS3MediaStack(app, 'aws-s3-media-stack', {
     environment,
-    bucketName: projectConfig.bucketName,
-    cdnDomain,
+    bucketName: projectConfig.cdnBucketName,
+    cdnDomain: cdnFqdn,
     awsRegion: projectConfig.awsRegion,
+    oacName: projectConfig.cdnOacName,
     iamPolicyName: projectConfig.iamPolicyName,
     iamUserName: projectConfig.iamUserName,
   });
@@ -96,8 +79,8 @@ function main(): void {
   // 2. Cloudflare Media スタック（AWS S3 Media Stackの出力値を使用）
   const cloudflareMediaStack = new CloudflareMediaStack(app, 'cloudflare-media-stack', {
     environment,
-    domainName: baseDomain,
-    subDomainName: subDomain,
+    domainName: projectConfig.cdnBaseDomain,
+    subDomainName: projectConfig.cdnSubDomain,
     cloudfrontDomainName: awsS3MediaStack.cloudfrontDomainName,
     acmValidationRecord: awsS3MediaStack.acmValidationRecord,
   });
@@ -105,6 +88,193 @@ function main(): void {
 
   // スタック間の依存関係を明示的に定義
   cloudflareMediaStack.addDependency(awsS3MediaStack);
+
+  // 3. 静的サイト配信スタック（StaticContentStack）
+  const staticSiteFqdn = `${projectConfig.staticSiteSubDomain}.${projectConfig.staticSiteBaseDomain}`;
+
+  const staticContentStack = new StaticContentStack(app, 'static-content-stack', {
+    environment,
+    awsRegion: projectConfig.awsRegion,
+    bucketName: projectConfig.staticSiteBucketName,
+    oacName: projectConfig.staticSiteOacName,
+    deployUserName: projectConfig.staticSiteDeployUserName,
+    deployPolicyName: projectConfig.staticSiteDeployPolicyName,
+    fqdn: staticSiteFqdn,
+    purposeTag: 'static-site',
+  });
+  configureRemoteState(staticContentStack, 'static-content-stack');
+
+  // 4. SQS キュースタック（QueueStack）
+  const queueStack = new QueueStack(app, 'queue-stack', {
+    environment,
+    awsRegion: projectConfig.awsRegion,
+    queues: [
+      {
+        id: projectConfig.commentsQueueId,
+        name: projectConfig.commentsQueueName,
+        visibilityTimeoutSeconds: 300,
+        messageRetentionSeconds: 1209600, // 14日
+      },
+      {
+        id: projectConfig.inquiryQueueId,
+        name: projectConfig.inquiryQueueName,
+        visibilityTimeoutSeconds: 300,
+        messageRetentionSeconds: 1209600, // 14日
+      },
+    ],
+    policies: [
+      {
+        id: projectConfig.workerSqsPolicyId,
+        name: projectConfig.workerSqsPolicyName,
+        description: 'Allow Cloudflare Workers to send messages to SQS queues',
+        statements: [
+          {
+            actions: ['sqs:SendMessage'],
+            resources: [{ queueId: projectConfig.commentsQueueId }, { queueId: projectConfig.inquiryQueueId }],
+          },
+        ],
+      },
+    ],
+    users: [
+      {
+        id: projectConfig.workerSqsUserId,
+        name: projectConfig.workerSqsUserName,
+        policyId: projectConfig.workerSqsPolicyId,
+        tags: {
+          Purpose: 'worker-sqs-access',
+        },
+      },
+    ],
+  });
+  configureRemoteState(queueStack, 'queue-stack');
+
+  // 5. Cloudflare Zone スタック（CloudflareZoneStack）
+  const cloudflareZoneStack = new CloudflareZoneStack(app, 'cloudflare-zone-stack', {
+    environment,
+    domainName: projectConfig.staticSiteBaseDomain,
+    subDomainName: 'www',
+    cloudfrontDomainName: staticContentStack.cloudfrontDomainName,
+    acmValidationRecord: { name: '', target: '' }, // StaticContentStackにACM証明書がある場合は取得
+  });
+  configureRemoteState(cloudflareZoneStack, 'cloudflare-zone-stack');
+  cloudflareZoneStack.addDependency(staticContentStack);
+
+  // 6. Cloudflare Turnstile スタック
+  const turnstileDomains = new Set<string>([projectConfig.staticSiteBaseDomain, staticSiteFqdn]);
+
+  const turnstileStack = new TurnstileStack(app, 'turnstile-stack', {
+    environment,
+    widgets: [
+      {
+        id: projectConfig.turnstileId,
+        name: projectConfig.turnstileName,
+        domains: Array.from(turnstileDomains),
+      },
+    ],
+  });
+  configureRemoteState(turnstileStack, 'turnstile-stack');
+
+  const turnstileWidget = turnstileStack.widgets.get(projectConfig.turnstileId);
+  if (!turnstileWidget) {
+    throw new Error(`Turnstile widget "${projectConfig.turnstileId}" is not configured.`);
+  }
+
+  // 7. Wrangler設定生成（WorkerStackより前に実行）
+  const wranglerConfigStack = new WranglerConfigStack(app, 'wrangler-config-stack', {
+    environment,
+    workers: [
+      {
+        id: 'comments',
+        baseName: 'comments-worker',
+        scriptPath: 'src/workers/comments-worker.ts',
+        compatibilityFlags: ['nodejs_compat'],
+        environments: {
+          prod: { name: 'comments-worker-prod', routes: [`https://${staticSiteFqdn}/api/comments/*`] },
+          dev: { name: 'comments-worker-dev', routes: [`https://${staticSiteFqdn}/api/comments/*`] },
+        },
+        secretNames: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'SQS_QUEUE_URL', 'TURNSTILE_SECRET_KEY'],
+      },
+      {
+        id: 'inquiry',
+        baseName: 'inquiry-worker',
+        scriptPath: 'src/workers/inquiry-worker.ts',
+        compatibilityFlags: ['nodejs_compat'],
+        environments: {
+          prod: { name: 'inquiry-worker-prod', routes: [`https://${staticSiteFqdn}/api/inquiry/*`] },
+          dev: { name: 'inquiry-worker-dev', routes: [`https://${staticSiteFqdn}/api/inquiry/*`] },
+        },
+        secretNames: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'SQS_QUEUE_URL', 'TURNSTILE_SECRET_KEY'],
+      },
+    ],
+  });
+  configureRemoteState(wranglerConfigStack, 'wrangler-config-stack');
+
+  // 8. Cloudflare Workers スタック - コメント投稿
+  const workerSqsUser = queueStack.users.get(projectConfig.workerSqsUserId);
+  if (!workerSqsUser) {
+    throw new Error(`${projectConfig.workerSqsUserId} not found in queueStack`);
+  }
+
+  const commentsQueue = queueStack.queues.get(projectConfig.commentsQueueId);
+  if (!commentsQueue) {
+    throw new Error(`${projectConfig.commentsQueueId} not found in queueStack`);
+  }
+
+  const commentsWorkerStack = new WorkerStack(app, 'comments-worker-stack', {
+    environment,
+    domainName: projectConfig.staticSiteBaseDomain,
+    workerName: `comments-worker-${environment}`,
+    scriptSourcePath: 'src/workers/comments-worker.ts',
+    routes: [`https://${staticSiteFqdn}/api/comments/*`],
+    secrets: {
+      AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
+      AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
+      AWS_REGION: projectConfig.awsRegion,
+      SQS_QUEUE_URL: commentsQueue.queue.url,
+      TURNSTILE_SECRET_KEY: turnstileWidget.secret,
+    },
+  });
+  configureRemoteState(commentsWorkerStack, 'comments-worker-stack');
+  commentsWorkerStack.addDependency(queueStack);
+  commentsWorkerStack.addDependency(wranglerConfigStack);
+
+  // 9. Cloudflare Workers スタック - 問い合わせフォーム
+  const inquiryQueue = queueStack.queues.get(projectConfig.inquiryQueueId);
+  if (!inquiryQueue) {
+    throw new Error(`${projectConfig.inquiryQueueId} not found in queueStack`);
+  }
+
+  const inquiryWorkerStack = new WorkerStack(app, 'inquiry-worker-stack', {
+    environment,
+    domainName: projectConfig.staticSiteBaseDomain,
+    workerName: `inquiry-worker-${environment}`,
+    scriptSourcePath: 'src/workers/inquiry-worker.ts',
+    routes: [`https://${staticSiteFqdn}/api/inquiry/*`],
+    secrets: {
+      AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
+      AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
+      AWS_REGION: projectConfig.awsRegion,
+      SQS_QUEUE_URL: inquiryQueue.queue.url,
+      TURNSTILE_SECRET_KEY: turnstileWidget.secret,
+    },
+  });
+  configureRemoteState(inquiryWorkerStack, 'inquiry-worker-stack');
+  inquiryWorkerStack.addDependency(queueStack);
+  inquiryWorkerStack.addDependency(wranglerConfigStack);
+
+  // 10. MonitoringStack（ログ監視）
+  const monitoringStack = new MonitoringStack(app, 'monitoring-stack', {
+    environment,
+    awsRegion: projectConfig.awsRegion,
+    logGroups: [
+      {
+        id: 'cloudflare_workers_log',
+        logGroupName: `/cloudflare/workers/${environment}`,
+        retentionDays: 30,
+      },
+    ],
+  });
+  configureRemoteState(monitoringStack, 'monitoring-stack');
 
   app.synth();
 }

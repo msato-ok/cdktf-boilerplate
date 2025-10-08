@@ -19,7 +19,7 @@ fi
 show_usage() {
   echo "Usage: $0 [options]" >&2
   echo "" >&2
-  echo "Deploy all stacks (AWS + Cloudflare with dependency resolution)" >&2
+  echo "Deploy all stacks (CDKTF + Cloudflare Workers)" >&2
   echo "" >&2
   echo "Options:" >&2
   echo "  --dry-run               - Plan only (no deployment)" >&2
@@ -27,6 +27,11 @@ show_usage() {
   echo "" >&2
   echo "環境変数:" >&2
   echo "  ENVIRONMENT=prod|dev" >&2
+  echo "" >&2
+  echo "デプロイフロー:" >&2
+  echo "  1. CDKTF準備（cleanup, get, build）" >&2
+  echo "  2. CDKTFデプロイ（AWS + Cloudflare DNS）" >&2
+  echo "  3. Workersデプロイ（Wrangler）" >&2
   echo "" >&2
 }
 
@@ -37,7 +42,6 @@ uses_local_toolkit_dependency() {
   fi
   return 1
 }
-
 DRY_RUN=false
 VERBOSE=false
 
@@ -87,7 +91,7 @@ if uses_local_toolkit_dependency; then
 fi
 
 echo ""
-echo "🚀 [2/2] Deployment Phase"
+echo "🚀 [2/3] CDKTF Deployment Phase"
 
 # 全スタックを依存関係に従ってデプロイ（CDKTFが自動解決）
 if [[ "$DRY_RUN" == "true" ]]; then
@@ -105,7 +109,30 @@ else
     echo "   ❌ Error: Failed to deploy stacks" >&2
     exit 1
   fi
-  echo "   ✅ Deployment completed"
+  echo "   ✅ CDKTF deployment completed"
+fi
+
+echo ""
+echo "☁️  [3/3] Cloudflare Workers Deployment Phase"
+
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "   Skipping Workers deployment (dry-run mode)"
+else
+  echo "   Deploying Workers to ${ENVIRONMENT}..."
+
+  # Wrangler設定ファイルの存在確認（環境ごとのファイル名）
+  if [[ ! -f "wrangler.comments.${ENVIRONMENT}.toml" ]] || [[ ! -f "wrangler.inquiry.${ENVIRONMENT}.toml" ]]; then
+    echo "   ⚠️  Warning: wrangler.toml files not found for ${ENVIRONMENT}. Run 'ENVIRONMENT=${ENVIRONMENT} npm run synth' to generate them."
+    echo "   Skipping Workers deployment."
+  else
+    # Workerをデプロイ（環境変数ENVIRONMENTを使用）
+    [[ "$VERBOSE" == "true" ]] && echo "   Command: ENVIRONMENT=$ENVIRONMENT npm run worker:deploy"
+    if ! ENVIRONMENT="$ENVIRONMENT" npm run $NPM_SILENT worker:deploy; then
+      echo "   ❌ Error: Failed to deploy Workers" >&2
+      exit 1
+    fi
+    echo "   ✅ Workers deployment completed"
+  fi
 fi
 
 echo ""
@@ -113,4 +140,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo "✅ Planning completed successfully!"
 else
   echo "🎉 Deployment completed successfully!"
+  echo ""
+  echo "次のステップ:"
+  echo "  1. Workerログを確認:"
+  echo "     ENVIRONMENT=${ENVIRONMENT} npm run worker:tail:comments"
+  echo "     ENVIRONMENT=${ENVIRONMENT} npm run worker:tail:inquiry"
 fi

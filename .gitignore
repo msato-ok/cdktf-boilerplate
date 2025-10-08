@@ -80,3 +80,6 @@ npm-debug.log
 
 # Generated OAuth checklists (可読性のため生成物は除外)
 oauth-checklist-*.md
+
+# Generated Wrangler config files (account_id を含むため除外)
+wrangler.*

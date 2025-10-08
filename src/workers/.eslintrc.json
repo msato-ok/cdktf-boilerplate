@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "node/no-unsupported-features/node-builtins": "off",
+    "@typescript-eslint/no-unsafe-call": "off",
+    "@typescript-eslint/no-unsafe-assignment": "off",
+    "@typescript-eslint/no-unsafe-member-access": "off"
+  }
+}
