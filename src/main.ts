@@ -152,9 +152,9 @@ function main(): void {
   const cloudflareZoneStack = new CloudflareZoneStack(app, 'cloudflare-zone-stack', {
     environment,
     domainName: projectConfig.staticSiteBaseDomain,
-    subDomainName: 'www',
+    subDomainName: projectConfig.staticSiteSubDomain,
     cloudfrontDomainName: staticContentStack.cloudfrontDomainName,
-    acmValidationRecord: { name: '', target: '' }, // StaticContentStackにACM証明書がある場合は取得
+    acmValidationRecord: staticContentStack.acmValidationRecord,
   });
   configureRemoteState(cloudflareZoneStack, 'cloudflare-zone-stack');
   cloudflareZoneStack.addDependency(staticContentStack);
@@ -179,7 +179,58 @@ function main(): void {
     throw new Error(`Turnstile widget "${projectConfig.turnstileId}" is not configured.`);
   }
 
-  // 7. Wrangler設定生成（WorkerStackより前に実行）
+  // 7. Cloudflare Workers スタック - コメント投稿
+  const workerSqsUser = queueStack.users.get(projectConfig.workerSqsUserId);
+  if (!workerSqsUser) {
+    throw new Error(`${projectConfig.workerSqsUserId} not found in queueStack`);
+  }
+
+  const commentsQueue = queueStack.queues.get(projectConfig.commentsQueueId);
+  if (!commentsQueue) {
+    throw new Error(`${projectConfig.commentsQueueId} not found in queueStack`);
+  }
+
+  const commentsWorkerStack = new WorkerStack(app, 'comments-worker-stack', {
+    environment,
+    domainName: projectConfig.staticSiteBaseDomain,
+    workerName: `comments-worker-${environment}`,
+    scriptSourcePath: 'src/workers/comments-worker.ts',
+    routes: [`https://${staticSiteFqdn}/api/comments/*`],
+    secrets: {
+      AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
+      AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
+      AWS_REGION: projectConfig.awsRegion,
+      SQS_QUEUE_URL: commentsQueue.queue.url,
+      TURNSTILE_SECRET_KEY: turnstileWidget.secret,
+    },
+  });
+  configureRemoteState(commentsWorkerStack, 'comments-worker-stack');
+  commentsWorkerStack.addDependency(queueStack);
+
+  // 8. Cloudflare Workers スタック - 問い合わせフォーム
+  const inquiryQueue = queueStack.queues.get(projectConfig.inquiryQueueId);
+  if (!inquiryQueue) {
+    throw new Error(`${projectConfig.inquiryQueueId} not found in queueStack`);
+  }
+
+  const inquiryWorkerStack = new WorkerStack(app, 'inquiry-worker-stack', {
+    environment,
+    domainName: projectConfig.staticSiteBaseDomain,
+    workerName: `inquiry-worker-${environment}`,
+    scriptSourcePath: 'src/workers/inquiry-worker.ts',
+    routes: [`https://${staticSiteFqdn}/api/inquiry/*`],
+    secrets: {
+      AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
+      AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
+      AWS_REGION: projectConfig.awsRegion,
+      SQS_QUEUE_URL: inquiryQueue.queue.url,
+      TURNSTILE_SECRET_KEY: turnstileWidget.secret,
+    },
+  });
+  configureRemoteState(inquiryWorkerStack, 'inquiry-worker-stack');
+  inquiryWorkerStack.addDependency(queueStack);
+
+  // 9. Wrangler設定生成（WorkerStackより前に実行）
   const wranglerConfigStack = new WranglerConfigStack(app, 'wrangler-config-stack', {
     environment,
     workers: [
@@ -208,59 +259,6 @@ function main(): void {
     ],
   });
   configureRemoteState(wranglerConfigStack, 'wrangler-config-stack');
-
-  // 8. Cloudflare Workers スタック - コメント投稿
-  const workerSqsUser = queueStack.users.get(projectConfig.workerSqsUserId);
-  if (!workerSqsUser) {
-    throw new Error(`${projectConfig.workerSqsUserId} not found in queueStack`);
-  }
-
-  const commentsQueue = queueStack.queues.get(projectConfig.commentsQueueId);
-  if (!commentsQueue) {
-    throw new Error(`${projectConfig.commentsQueueId} not found in queueStack`);
-  }
-
-  const commentsWorkerStack = new WorkerStack(app, 'comments-worker-stack', {
-    environment,
-    domainName: projectConfig.staticSiteBaseDomain,
-    workerName: `comments-worker-${environment}`,
-    scriptSourcePath: 'src/workers/comments-worker.ts',
-    routes: [`https://${staticSiteFqdn}/api/comments/*`],
-    secrets: {
-      AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
-      AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
-      AWS_REGION: projectConfig.awsRegion,
-      SQS_QUEUE_URL: commentsQueue.queue.url,
-      TURNSTILE_SECRET_KEY: turnstileWidget.secret,
-    },
-  });
-  configureRemoteState(commentsWorkerStack, 'comments-worker-stack');
-  commentsWorkerStack.addDependency(queueStack);
-  commentsWorkerStack.addDependency(wranglerConfigStack);
-
-  // 9. Cloudflare Workers スタック - 問い合わせフォーム
-  const inquiryQueue = queueStack.queues.get(projectConfig.inquiryQueueId);
-  if (!inquiryQueue) {
-    throw new Error(`${projectConfig.inquiryQueueId} not found in queueStack`);
-  }
-
-  const inquiryWorkerStack = new WorkerStack(app, 'inquiry-worker-stack', {
-    environment,
-    domainName: projectConfig.staticSiteBaseDomain,
-    workerName: `inquiry-worker-${environment}`,
-    scriptSourcePath: 'src/workers/inquiry-worker.ts',
-    routes: [`https://${staticSiteFqdn}/api/inquiry/*`],
-    secrets: {
-      AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
-      AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
-      AWS_REGION: projectConfig.awsRegion,
-      SQS_QUEUE_URL: inquiryQueue.queue.url,
-      TURNSTILE_SECRET_KEY: turnstileWidget.secret,
-    },
-  });
-  configureRemoteState(inquiryWorkerStack, 'inquiry-worker-stack');
-  inquiryWorkerStack.addDependency(queueStack);
-  inquiryWorkerStack.addDependency(wranglerConfigStack);
 
   // 10. MonitoringStack（ログ監視）
   const monitoringStack = new MonitoringStack(app, 'monitoring-stack', {

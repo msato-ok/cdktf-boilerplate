@@ -36,10 +36,10 @@ for stack_dir in */; do
   cd "$stack_name"
   echo "[DEBUG] Changed to directory: $(pwd)" >&2
 
-  # terraform planを実行してロック状態を確認
-  echo "[DEBUG] Running terraform plan..." >&2
-  lock_error=$(terraform plan 2>&1 || true)
-  echo "[DEBUG] Terraform plan completed" >&2
+  # terraform planを実行してロック状態を確認（タイムアウト3秒）
+  echo "[DEBUG] Running terraform plan with timeout..." >&2
+  lock_error=$(timeout 3 terraform plan -refresh=false -input=false 2>&1 || true)
+  echo "[DEBUG] Terraform plan completed or timed out" >&2
 
   if echo "$lock_error" | grep -q "Error acquiring the state lock"; then
     echo "[DEBUG] Lock detected" >&2
