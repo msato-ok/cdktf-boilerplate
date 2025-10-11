@@ -13,8 +13,9 @@ fi
 # Usage:
 #   scripts/deploy.sh [options]
 # Options:
-#   --dry-run    Plan only (no deployment)
-#   --verbose    Show detailed output
+#   --dry-run      Plan only (no deployment)
+#   --verbose      Show detailed output
+#   --serial       Force Terraform parallelism to 1
 
 show_usage() {
   echo "Usage: $0 [options]" >&2
@@ -24,6 +25,7 @@ show_usage() {
   echo "Options:" >&2
   echo "  --dry-run               - Plan only (no deployment)" >&2
   echo "  --verbose               - Show detailed output" >&2
+  echo "  --serial                - Force Terraform parallelism to 1 (deploy only)" >&2
   echo "" >&2
   echo "環境変数:" >&2
   echo "  ENVIRONMENT=prod|dev" >&2
@@ -44,11 +46,13 @@ uses_local_toolkit_dependency() {
 }
 DRY_RUN=false
 VERBOSE=false
+SERIAL=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dry-run) DRY_RUN=true; shift ;;
     --verbose) VERBOSE=true; shift ;;
+    --serial) SERIAL=true; shift ;;
     --help|-h) show_usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; show_usage; exit 1 ;;
   esac
@@ -94,6 +98,11 @@ echo ""
 echo "🚀 [2/3] CDKTF Deployment Phase"
 
 # 全スタックを依存関係に従ってデプロイ（CDKTFが自動解決）
+PARALLELISM_ARGS=()
+if [[ "$SERIAL" == "true" ]]; then
+  PARALLELISM_ARGS+=("--parallelism=1")
+fi
+
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "   Planning all stacks..."
   [[ "$VERBOSE" == "true" ]] && echo "   Command: ENVIRONMENT=$ENVIRONMENT npm run plan"
@@ -104,8 +113,8 @@ if [[ "$DRY_RUN" == "true" ]]; then
   echo "   ✅ Planning completed"
 else
   echo "   Deploying all stacks..."
-  [[ "$VERBOSE" == "true" ]] && echo "   Command: ENVIRONMENT=$ENVIRONMENT npm run deploy"
-  if ! ENVIRONMENT="$ENVIRONMENT" CI=1 npm run $NPM_SILENT deploy; then
+  [[ "$VERBOSE" == "true" ]] && echo "   Command: ENVIRONMENT=$ENVIRONMENT npm run deploy -- ${PARALLELISM_ARGS[*]}"
+  if ! ENVIRONMENT="$ENVIRONMENT" CI=1 npm run $NPM_SILENT deploy -- "${PARALLELISM_ARGS[@]}"; then
     echo "   ❌ Error: Failed to deploy stacks" >&2
     exit 1
   fi
