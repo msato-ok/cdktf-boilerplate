@@ -5,7 +5,8 @@ import {
   StaticContentStack,
   QueueStack,
   WorkerStack,
-  CloudflareZoneStack,
+  StaticSiteZoneStack,
+  WorkersDnsStack,
   MonitoringStack,
   WranglerConfigStack,
   TurnstileStack,
@@ -48,9 +49,11 @@ function main(): void {
       | StaticContentStack
       | QueueStack
       | WorkerStack
-      | CloudflareZoneStack
+      | StaticSiteZoneStack
+      | WorkersDnsStack
       | MonitoringStack
-      | WranglerConfigStack,
+      | WranglerConfigStack
+      | TurnstileStack,
     stackId: string,
   ): void => {
     new S3Backend(stack, {
@@ -91,6 +94,7 @@ function main(): void {
 
   // 3. 静的サイト配信スタック（StaticContentStack）
   const staticSiteFqdn = `${projectConfig.staticSiteSubDomain}.${projectConfig.staticSiteBaseDomain}`;
+  const staticApiFqdn = `${projectConfig.staticApiSubDomain}.${projectConfig.staticSiteBaseDomain}`;
 
   const staticContentStack = new StaticContentStack(app, 'static-content-stack', {
     environment,
@@ -148,19 +152,29 @@ function main(): void {
   });
   configureRemoteState(queueStack, 'queue-stack');
 
-  // 5. Cloudflare Zone スタック（CloudflareZoneStack）
-  const cloudflareZoneStack = new CloudflareZoneStack(app, 'cloudflare-zone-stack', {
+  // 5. 静的サイト用 Cloudflare Zone スタック（StaticSiteZoneStack）
+  const staticSiteZoneStack = new StaticSiteZoneStack(app, 'static-site-zone-stack', {
     environment,
     domainName: projectConfig.staticSiteBaseDomain,
     subDomainName: projectConfig.staticSiteSubDomain,
     cloudfrontDomainName: staticContentStack.cloudfrontDomainName,
     acmValidationRecord: staticContentStack.acmValidationRecord,
   });
-  configureRemoteState(cloudflareZoneStack, 'cloudflare-zone-stack');
-  cloudflareZoneStack.addDependency(staticContentStack);
+  configureRemoteState(staticSiteZoneStack, 'static-site-zone-stack');
+  staticSiteZoneStack.addDependency(staticContentStack);
+
+  // 5-2. Workers 用 DNS スタック（WorkersDnsStack）
+  const workersDnsStack = new WorkersDnsStack(app, 'workers-dns-stack', {
+    environment,
+    zoneId: staticSiteZoneStack.zoneId,
+    zoneName: projectConfig.staticSiteBaseDomain,
+    apiSubDomainName: projectConfig.staticApiSubDomain,
+  });
+  configureRemoteState(workersDnsStack, 'workers-dns-stack');
+  workersDnsStack.addDependency(staticSiteZoneStack);
 
   // 6. Cloudflare Turnstile スタック
-  const turnstileDomains = new Set<string>([projectConfig.staticSiteBaseDomain, staticSiteFqdn]);
+  const turnstileDomains = new Set<string>([projectConfig.staticSiteBaseDomain, staticSiteFqdn, staticApiFqdn]);
 
   const turnstileStack = new TurnstileStack(app, 'turnstile-stack', {
     environment,
@@ -195,7 +209,7 @@ function main(): void {
     domainName: projectConfig.staticSiteBaseDomain,
     workerName: `comments-worker-${environment}`,
     scriptSourcePath: 'src/workers/comments-worker.ts',
-    routes: [`https://${staticSiteFqdn}/api/comments/*`],
+    routes: [`https://${staticApiFqdn}/comments/*`],
     secrets: {
       AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
       AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
@@ -218,7 +232,7 @@ function main(): void {
     domainName: projectConfig.staticSiteBaseDomain,
     workerName: `inquiry-worker-${environment}`,
     scriptSourcePath: 'src/workers/inquiry-worker.ts',
-    routes: [`https://${staticSiteFqdn}/api/inquiry/*`],
+    routes: [`https://${staticApiFqdn}/inquiry/*`],
     secrets: {
       AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
       AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
@@ -230,7 +244,7 @@ function main(): void {
   configureRemoteState(inquiryWorkerStack, 'inquiry-worker-stack');
   inquiryWorkerStack.addDependency(queueStack);
 
-  // 9. Wrangler設定生成（WorkerStackより前に実行）
+  // 9. Wrangler設定生成（環境ごとに1つの設定）
   const wranglerConfigStack = new WranglerConfigStack(app, 'wrangler-config-stack', {
     environment,
     workers: [
@@ -240,10 +254,15 @@ function main(): void {
         scriptPath: 'src/workers/comments-worker.ts',
         compatibilityFlags: ['nodejs_compat'],
         environments: {
-          prod: { name: 'comments-worker-prod', routes: [`https://${staticSiteFqdn}/api/comments/*`] },
-          dev: { name: 'comments-worker-dev', routes: [`https://${staticSiteFqdn}/api/comments/*`] },
+          [environment]: { name: `comments-worker-${environment}`, routes: [`https://${staticApiFqdn}/comments/*`] },
         },
-        secretNames: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'SQS_QUEUE_URL', 'TURNSTILE_SECRET_KEY'],
+        secretNames: [
+          'AWS_ACCESS_KEY_ID',
+          'AWS_SECRET_ACCESS_KEY',
+          'AWS_REGION',
+          'SQS_QUEUE_URL',
+          'TURNSTILE_SECRET_KEY',
+        ],
       },
       {
         id: 'inquiry',
@@ -251,10 +270,15 @@ function main(): void {
         scriptPath: 'src/workers/inquiry-worker.ts',
         compatibilityFlags: ['nodejs_compat'],
         environments: {
-          prod: { name: 'inquiry-worker-prod', routes: [`https://${staticSiteFqdn}/api/inquiry/*`] },
-          dev: { name: 'inquiry-worker-dev', routes: [`https://${staticSiteFqdn}/api/inquiry/*`] },
+          [environment]: { name: `inquiry-worker-${environment}`, routes: [`https://${staticApiFqdn}/inquiry/*`] },
         },
-        secretNames: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'SQS_QUEUE_URL', 'TURNSTILE_SECRET_KEY'],
+        secretNames: [
+          'AWS_ACCESS_KEY_ID',
+          'AWS_SECRET_ACCESS_KEY',
+          'AWS_REGION',
+          'SQS_QUEUE_URL',
+          'TURNSTILE_SECRET_KEY',
+        ],
       },
     ],
   });

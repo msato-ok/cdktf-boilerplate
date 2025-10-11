@@ -35,6 +35,7 @@ node_modules/.cache/
 .env
 .env.*.local
 .env.local
+.dev.vars
 
 # OS generated files
 .DS_Store
@@ -62,6 +63,7 @@ pids/
 
 # Terraform / CDKTF
 .terraform/
+.terraform.d/
 terraform.tfvars
 terraform.*.tfvars
 *.tfstate
@@ -83,3 +85,7 @@ oauth-checklist-*.md
 
 # Generated Wrangler config files (account_id を含むため除外)
 wrangler.*
+.wrangler/
+
+# Generated Turnstile test HTML files
+test-turnstile*.html

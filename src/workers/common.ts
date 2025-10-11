@@ -41,13 +41,29 @@ export const MAX_MESSAGE_LENGTH = 10000;
  * Turnstileトークンを検証
  */
 export async function verifyTurnstile(token: string, secretKey: string): Promise<TurnstileResponse> {
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ secret: secretKey, response: token }),
-  });
+  // ローカル開発環境（テスト用シークレット）では常に成功を返す
+  if (secretKey === '1x0000000000000000000000000000000AA') {
+    console.log('[Turnstile] Using test secret key - bypassing verification');
+    return { success: true };
+  }
 
-  return (await response.json()) as TurnstileResponse;
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: secretKey, response: token }),
+    });
+
+    if (!response.ok) {
+      console.error('[Turnstile] API returned error:', response.status);
+      return { success: false, 'error-codes': ['api-error'] };
+    }
+
+    return (await response.json()) as TurnstileResponse;
+  } catch (error) {
+    console.error('[Turnstile] Failed to verify token:', error);
+    return { success: false, 'error-codes': ['network-error'] };
+  }
 }
 
 /**
@@ -73,31 +89,43 @@ export function sanitizeEmail(email: string): string {
  * SQSにメッセージを送信
  */
 export async function sendToSqs(message: unknown, env: WorkerEnv): Promise<void> {
-  // @ts-ignore - aws4fetch is dynamically imported in Cloudflare Workers
-  const { AwsClient } = await import('aws4fetch');
+  try {
+    // @ts-ignore - aws4fetch is dynamically imported in Cloudflare Workers
+    const { AwsClient } = await import('aws4fetch');
 
-  const aws = new AwsClient({
-    accessKeyId: env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-    region: env.AWS_REGION,
-  });
+    const aws = new AwsClient({
+      accessKeyId: env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+      region: env.AWS_REGION,
+    });
 
-  const sqsParams = {
-    QueueUrl: env.SQS_QUEUE_URL,
-    MessageBody: JSON.stringify(message),
-  };
+    const sqsParams = {
+      QueueUrl: env.SQS_QUEUE_URL,
+      MessageBody: JSON.stringify(message),
+    };
 
-  const url = new URL(env.SQS_QUEUE_URL);
-  const body = new URLSearchParams({
-    Action: 'SendMessage',
-    MessageBody: sqsParams.MessageBody,
-  }).toString();
+    const url = new URL(env.SQS_QUEUE_URL);
+    const body = new URLSearchParams({
+      Action: 'SendMessage',
+      MessageBody: sqsParams.MessageBody,
+    }).toString();
 
-  await aws.fetch(url.toString(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
+    const response = await aws.fetch(url.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`SQS API error: ${response.status} - ${errorText}`);
+    }
+
+    console.log('[SQS] Message sent successfully');
+  } catch (error) {
+    console.error('[SQS] Failed to send message:', error);
+    throw new Error('Failed to send message to SQS');
+  }
 }
 
 /**

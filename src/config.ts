@@ -20,6 +20,7 @@ export interface ProjectConfig {
   staticSiteOacName: string;
   staticSiteDeployUserName: string;
   staticSiteDeployPolicyName: string;
+  staticApiSubDomain: string;
   turnstileId: string;
   turnstileName: string;
   commentsQueueName: string;
@@ -61,6 +62,7 @@ export function buildProjectConfig(): ProjectConfig {
     staticSiteBaseDomain: requireEnv('STATIC_SITE_DOMAIN'),
     staticSiteSubDomain: requireEnv('STATIC_SITE_SUBDOMAIN'),
     staticSiteBucketName: requireEnv('STATIC_SITE_BUCKET_NAME'),
+    staticApiSubDomain: requireEnv('STATIC_API_SUBDOMAIN'),
     staticSiteOacName: `static-site-oac-${environment}`,
     staticSiteDeployUserName: `galileo-rent-static-site-deploy-user-${environment}`,
     staticSiteDeployPolicyName: `GalileoRentStaticSiteDeployPolicy-${environment}`,

@@ -97,14 +97,17 @@ export function createSqsWorker<TRequest extends SqsWorkerRequest>(
   return {
     async fetch(request: Request, env: WorkerEnv): Promise<Response> {
       // ===== Template Method: 固定部分の開始 =====
+      console.log('[Worker] Request received:', request.method, request.url);
 
       // 1. CORS preflight処理
       if (request.method === 'OPTIONS') {
+        console.log('[Worker] CORS preflight');
         return corsPreflightResponse();
       }
 
       // 2. HTTPメソッド検証
       if (request.method !== 'POST') {
+        console.log('[Worker] Method not allowed:', request.method);
         return new Response('Method Not Allowed', {
           status: 405,
           headers: { ...CORS_HEADERS, 'Cache-Control': 'no-store' },
@@ -112,32 +115,42 @@ export function createSqsWorker<TRequest extends SqsWorkerRequest>(
       }
 
       try {
+        console.log('[Worker] Parsing request body...');
         const body = (await request.json()) as TRequest;
+        console.log('[Worker] Body parsed:', Object.keys(body));
 
         // 3. 必須フィールドバリデーション
+        console.log('[Worker] Validating required fields...');
         const allRequiredFields = [...config.requiredFields, 'turnstileToken'];
         const fieldError = validateRequiredFields(body, allRequiredFields);
         if (fieldError) {
+          console.log('[Worker] Field validation error:', fieldError);
           return errorResponse(fieldError, 400);
         }
 
         // 4. メッセージ長バリデーション
+        console.log('[Worker] Validating message length...');
         const messageValue = (body as Record<string, unknown>)[config.messageField];
         if (typeof messageValue === 'string') {
           const lengthError = validateMessageLength(messageValue);
           if (lengthError) {
+            console.log('[Worker] Message length error:', lengthError);
             return errorResponse(lengthError, 400);
           }
         }
 
         // 5. Turnstile BOT検証
+        console.log('[Worker] Verifying Turnstile token...');
         const turnstileResult = await verifyTurnstile(body.turnstileToken, env.TURNSTILE_SECRET_KEY);
+        console.log('[Worker] Turnstile result:', turnstileResult);
         if (!turnstileResult.success) {
-          return errorResponse('Bot verification failed', 429);
+          console.log('[Worker] Turnstile verification failed');
+          return errorResponse('Bot verification failed', 400);
         }
 
         // ===== Template Method: 可変部分（各Workerが実装） =====
         // 6. 入力データのサニタイズ
+        console.log('[Worker] Sanitizing input data...');
         const sanitizedMessage = config.sanitize(body);
 
         // ===== Template Method: 固定部分の再開 =====
@@ -150,12 +163,25 @@ export function createSqsWorker<TRequest extends SqsWorkerRequest>(
         }
 
         // 7. SQSへのメッセージ送信
+        console.log('[Worker] Sending message to SQS...');
         await sendToSqs(sanitizedMessage, env);
+        console.log('[Worker] Message sent to SQS successfully');
 
+        console.log('[Worker] Returning success response');
         return successResponse(config.successMessage);
       } catch (error) {
         // 8. エラーハンドリング
-        console.error('Error processing request:', error);
+        console.error('[Worker] Error processing request:', error);
+
+        // JSON パースエラーやバリデーションエラーは 400 Bad Request
+        if (error instanceof SyntaxError) {
+          return errorResponse('Invalid JSON', 400);
+        }
+        if (error instanceof Error && error.message.includes('Invalid email format')) {
+          return errorResponse(error.message, 400);
+        }
+
+        // その他のエラーは 500 Internal Server Error
         return errorResponse('Internal server error', 500);
       }
     },
