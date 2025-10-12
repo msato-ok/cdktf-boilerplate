@@ -3,7 +3,7 @@ import { ensureAwsAuth } from '@minr-dev/cdktf-toolkit';
 import { buildProjectConfig } from '../config';
 
 /**
- * 動的サイト（WordPress等）用インフラのメイン実行フロー
+ * 動的サイト（WordPress等）用インフラのデプロイフロー
  *
  * 将来実装予定:
  * - EC2/ECS/Fargate によるアプリケーションサーバー
@@ -12,7 +12,7 @@ import { buildProjectConfig } from '../config';
  * - ALB/NLB によるロードバランサー
  * - Cloudflare による CDN/WAF
  */
-export function stackDynamicSite(app: App): void {
+export function deployDynamicSite(app: App): void {
   const projectConfig = buildProjectConfig();
   const { environment } = projectConfig;
   console.log(`[Dynamic Site] Environment: ${environment}`);

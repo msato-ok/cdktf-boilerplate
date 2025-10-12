@@ -1,7 +1,7 @@
 import { App } from 'cdktf';
-import { stackS3Media } from './stacks/s3-media';
-import { stackStaticSite } from './stacks/static-site';
-import { stackDynamicSite } from './stacks/dynamic-site';
+import { deployS3Media } from './flows/s3-media';
+import { deployStaticSite } from './flows/static-site';
+import { deployDynamicSite } from './flows/dynamic-site';
 
 /**
  * galileo-wp-iac プロジェクトの統合エントリーポイント
@@ -26,21 +26,21 @@ function main(): void {
 
   switch (target) {
     case 's3-media':
-      stackS3Media(app);
+      deployS3Media(app);
       break;
     case 'static-site':
-      stackStaticSite(app);
+      deployStaticSite(app);
       break;
     case 'dynamic-site':
-      stackDynamicSite(app);
+      deployDynamicSite(app);
       break;
     case 'all':
     case undefined:
     case '':
       // すべてのスタックを1つのAppに追加
-      stackS3Media(app);
-      stackStaticSite(app);
-      stackDynamicSite(app);
+      deployS3Media(app);
+      deployStaticSite(app);
+      deployDynamicSite(app);
       break;
     default:
       throw new Error(`Unknown DEPLOY_TARGET: ${target}. Valid values are: s3-media, static-site, dynamic-site, all`);

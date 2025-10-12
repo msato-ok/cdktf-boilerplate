@@ -4,13 +4,13 @@ import { buildProjectConfig } from '../config';
 import { configureRemoteState } from '../shared/backend-helper';
 
 /**
- * S3 Media Offload用インフラのメイン実行フロー
+ * S3 Media Offload用インフラのデプロイフロー
  *
  * WordPress S3 Media Offload用インフラを以下の順序でデプロイ:
  * 1. AWS S3 Media Stack: S3バケット、CloudFront、IAMリソース
  * 2. Cloudflare Media Stack: CDN配信用DNS、TLS設定
  */
-export function stackS3Media(app: App): void {
+export function deployS3Media(app: App): void {
   const projectConfig = buildProjectConfig();
   const { environment } = projectConfig;
   console.log(`[S3 Media] Environment: ${environment}`);

@@ -14,7 +14,7 @@ import { buildProjectConfig } from '../config';
 import { configureRemoteState } from '../shared/backend-helper';
 
 /**
- * 静的サイト配信用インフラのメイン実行フロー
+ * 静的サイト配信用インフラのデプロイフロー
  *
  * 静的サイト（HTML/CSS/JS）の配信とAPIエンドポイント（Cloudflare Workers）を構築:
  * 1. StaticContentStack: S3バケット、CloudFront、デプロイユーザー
@@ -26,7 +26,7 @@ import { configureRemoteState } from '../shared/backend-helper';
  * 7. WranglerConfigStack: Wrangler設定ファイル生成
  * 8. MonitoringStack: CloudWatch Logs
  */
-export function stackStaticSite(app: App): void {
+export function deployStaticSite(app: App): void {
   const projectConfig = buildProjectConfig();
   const { environment } = projectConfig;
   console.log(`[Static Site] Environment: ${environment}`);
@@ -47,13 +47,14 @@ export function stackStaticSite(app: App): void {
   const staticApiFqdn = `${projectConfig.staticApiSubDomain}.${projectConfig.staticSiteBaseDomain}`;
 
   // 1. 静的サイト配信スタック（StaticContentStack）
-  const staticContentStack = StaticContentStack.createDefault(app, 'static-content-stack', {
+  const staticContentStack = StaticContentStack.createWithCustomDomain(app, 'static-content-stack', {
     environment,
     awsRegion: projectConfig.awsRegion,
     bucketName: projectConfig.staticSiteBucketName,
     oacName: projectConfig.staticSiteOacName,
     deployUserName: projectConfig.staticSiteDeployUserName,
     deployPolicyName: projectConfig.staticSiteDeployPolicyName,
+    customDomain: staticSiteFqdn,
     purposeTag: 'static-site',
   });
   configureRemoteState(staticContentStack, {
@@ -174,7 +175,10 @@ export function stackStaticSite(app: App): void {
     domainName: projectConfig.staticSiteBaseDomain,
     workerName: `comments-worker-${environment}`,
     scriptSourcePath: 'src/workers/comments-worker.ts',
-    routes: [`https://${staticApiFqdn}/comments/*`],
+    routes: [
+      `https://${staticApiFqdn}/comments`,
+      `https://${staticApiFqdn}/comments/*`,
+    ],
     secrets: {
       AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
       AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
@@ -200,7 +204,10 @@ export function stackStaticSite(app: App): void {
     domainName: projectConfig.staticSiteBaseDomain,
     workerName: `inquiry-worker-${environment}`,
     scriptSourcePath: 'src/workers/inquiry-worker.ts',
-    routes: [`https://${staticApiFqdn}/inquiry/*`],
+    routes: [
+      `https://${staticApiFqdn}/inquiry`,
+      `https://${staticApiFqdn}/inquiry/*`,
+    ],
     secrets: {
       AWS_ACCESS_KEY_ID: workerSqsUser.accessKeyId,
       AWS_SECRET_ACCESS_KEY: workerSqsUser.secretAccessKey,
