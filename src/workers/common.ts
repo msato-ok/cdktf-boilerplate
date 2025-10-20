@@ -1,3 +1,6 @@
+import { WorkerLogger } from './logger';
+import { stringifyError } from './error-utils';
+
 /**
  * Cloudflare Workers 共通ユーティリティ
  */
@@ -11,6 +14,7 @@ export interface WorkerEnv {
   AWS_REGION: string;
   SQS_QUEUE_URL: string;
   TURNSTILE_SECRET_KEY: string;
+  NOTIFICATION_SQS_QUEUE_URL: string;
 }
 
 /**
@@ -40,10 +44,18 @@ export const MAX_MESSAGE_LENGTH = 10000;
 /**
  * Turnstileトークンを検証
  */
-export async function verifyTurnstile(token: string, secretKey: string): Promise<TurnstileResponse> {
+export async function verifyTurnstile(
+  token: string,
+  secretKey: string,
+  logger: WorkerLogger,
+): Promise<TurnstileResponse> {
+  if (!logger) {
+    throw new Error('verifyTurnstile requires a WorkerLogger instance.');
+  }
+
   // ローカル開発環境（テスト用シークレット）では常に成功を返す
   if (secretKey === '1x0000000000000000000000000000000AA') {
-    console.log('[Turnstile] Using test secret key - bypassing verification');
+    logger.info('[Turnstile] Using test secret key - bypassing verification');
     return { success: true };
   }
 
@@ -55,13 +67,13 @@ export async function verifyTurnstile(token: string, secretKey: string): Promise
     });
 
     if (!response.ok) {
-      console.error('[Turnstile] API returned error:', response.status);
+      logger.error('[Turnstile] API returned error', { status: response.status });
       return { success: false, 'error-codes': ['api-error'] };
     }
 
     return (await response.json()) as TurnstileResponse;
   } catch (error) {
-    console.error('[Turnstile] Failed to verify token:', error);
+    logger.error('[Turnstile] Failed to verify token', { error: stringifyError(error) });
     return { success: false, 'error-codes': ['network-error'] };
   }
 }
@@ -88,7 +100,16 @@ export function sanitizeEmail(email: string): string {
 /**
  * SQSにメッセージを送信
  */
-export async function sendToSqs(message: unknown, env: WorkerEnv): Promise<void> {
+export async function sendToSqs(message: unknown, env: WorkerEnv, logger: WorkerLogger): Promise<void> {
+  await sendToSqsWithUrl(env.SQS_QUEUE_URL, message, env, logger);
+}
+
+export async function sendToSqsWithUrl(
+  queueUrl: string,
+  message: unknown,
+  env: WorkerEnv,
+  logger: WorkerLogger,
+): Promise<void> {
   try {
     // @ts-ignore - aws4fetch is dynamically imported in Cloudflare Workers
     const { AwsClient } = await import('aws4fetch');
@@ -99,15 +120,10 @@ export async function sendToSqs(message: unknown, env: WorkerEnv): Promise<void>
       region: env.AWS_REGION,
     });
 
-    const sqsParams = {
-      QueueUrl: env.SQS_QUEUE_URL,
-      MessageBody: JSON.stringify(message),
-    };
-
-    const url = new URL(env.SQS_QUEUE_URL);
+    const url = new URL(queueUrl);
     const body = new URLSearchParams({
       Action: 'SendMessage',
-      MessageBody: sqsParams.MessageBody,
+      MessageBody: JSON.stringify(message),
     }).toString();
 
     const response = await aws.fetch(url.toString(), {
@@ -116,14 +132,14 @@ export async function sendToSqs(message: unknown, env: WorkerEnv): Promise<void>
       body,
     });
 
+    const responseText = await response.text();
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`SQS API error: ${response.status} - ${errorText}`);
+      throw new Error(`SQS API error: ${response.status} - ${responseText}`);
     }
 
-    console.log('[SQS] Message sent successfully');
+    logger.info('[SQS] Message sent successfully');
   } catch (error) {
-    console.error('[SQS] Failed to send message:', error);
+    console.error('[SQS] Failed to send message', { error: stringifyError(error) });
     throw new Error('Failed to send message to SQS');
   }
 }
@@ -166,7 +182,7 @@ export function validateRequiredFields(body: unknown, fields: string[]): string 
   const obj = body as Record<string, unknown>;
   for (const field of fields) {
     if (!obj[field]) {
-      return 'Missing required fields';
+      return `Missing required fields: ${field}`;
     }
   }
   return null;

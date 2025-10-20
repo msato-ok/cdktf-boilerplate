@@ -9,6 +9,7 @@ import {
   MonitoringStack,
   WranglerConfigStack,
   TurnstileStack,
+  SqsLogForwarderStack,
 } from '@minr-dev/cdktf-toolkit';
 
 /**
@@ -24,7 +25,8 @@ export function configureRemoteState(
     | WorkersDnsStack
     | MonitoringStack
     | WranglerConfigStack
-    | TurnstileStack,
+    | TurnstileStack
+    | SqsLogForwarderStack,
   config: {
     stateBucket: string;
     stateKeyPrefix: string;

@@ -27,6 +27,9 @@ import {
   validateRequiredFields,
   validateMessageLength,
 } from './common';
+import { createWorkerLogger } from './logger';
+import { stringifyError } from './error-utils';
+import type { ExecutionContextLike } from './types';
 
 /**
  * リクエストボディの基底型
@@ -52,6 +55,8 @@ export interface SanitizedMessage {
  * 固定された処理フローの中で、この設定に基づいて動作をカスタマイズします。
  */
 export interface SqsWorkerConfig<TRequest extends SqsWorkerRequest> {
+  /** ログ出力およびメトリクス集計で利用する Worker 名 */
+  workerName: string;
   /** 必須フィールド名のリスト（turnstileTokenは自動で含まれる） */
   requiredFields: string[];
   /** バリデーション対象のメッセージフィールド名 */
@@ -93,21 +98,23 @@ export interface SqsWorkerConfig<TRequest extends SqsWorkerRequest> {
  */
 export function createSqsWorker<TRequest extends SqsWorkerRequest>(
   config: SqsWorkerConfig<TRequest>,
-): { fetch: (request: Request, env: WorkerEnv) => Promise<Response> } {
+): { fetch: (request: Request, env: WorkerEnv, executionCtx?: ExecutionContextLike) => Promise<Response> } {
   return {
-    async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+    async fetch(request: Request, env: WorkerEnv, executionCtx?: ExecutionContextLike): Promise<Response> {
+      const logger = createWorkerLogger(config.workerName, env, executionCtx);
+
       // ===== Template Method: 固定部分の開始 =====
-      console.log('[Worker] Request received:', request.method, request.url);
+      logger.debug('Request received', { method: request.method, url: request.url });
 
       // 1. CORS preflight処理
       if (request.method === 'OPTIONS') {
-        console.log('[Worker] CORS preflight');
+        logger.debug('CORS preflight request');
         return corsPreflightResponse();
       }
 
       // 2. HTTPメソッド検証
       if (request.method !== 'POST') {
-        console.log('[Worker] Method not allowed:', request.method);
+        logger.warn('Method not allowed', { method: request.method });
         return new Response('Method Not Allowed', {
           status: 405,
           headers: { ...CORS_HEADERS, 'Cache-Control': 'no-store' },
@@ -115,42 +122,42 @@ export function createSqsWorker<TRequest extends SqsWorkerRequest>(
       }
 
       try {
-        console.log('[Worker] Parsing request body...');
+        logger.debug('Parsing request body');
         const body = (await request.json()) as TRequest;
-        console.log('[Worker] Body parsed:', Object.keys(body));
+        logger.debug('Request body parsed', { keys: Object.keys(body) });
 
         // 3. 必須フィールドバリデーション
-        console.log('[Worker] Validating required fields...');
+        logger.debug('Validating required fields');
         const allRequiredFields = [...config.requiredFields, 'turnstileToken'];
         const fieldError = validateRequiredFields(body, allRequiredFields);
         if (fieldError) {
-          console.log('[Worker] Field validation error:', fieldError);
+          logger.warn('Field validation error', { reason: fieldError });
           return errorResponse(fieldError, 400);
         }
 
-        // 4. メッセージ長バリデーション
-        console.log('[Worker] Validating message length...');
+        // 4. Turnstile BOT検証
+        logger.debug('Verifying Turnstile token');
+        const turnstileResult = await verifyTurnstile(body.turnstileToken, env.TURNSTILE_SECRET_KEY, logger);
+        logger.debug('Turnstile verification completed', turnstileResult);
+        if (!turnstileResult.success) {
+          logger.warn('Turnstile verification failed');
+          return errorResponse('Bot verification failed', 400);
+        }
+
+        // 5. メッセージ長バリデーション
+        logger.debug('Validating message length');
         const messageValue = (body as Record<string, unknown>)[config.messageField];
         if (typeof messageValue === 'string') {
           const lengthError = validateMessageLength(messageValue);
           if (lengthError) {
-            console.log('[Worker] Message length error:', lengthError);
+            logger.warn('Message length validation error', { reason: lengthError });
             return errorResponse(lengthError, 400);
           }
         }
 
-        // 5. Turnstile BOT検証
-        console.log('[Worker] Verifying Turnstile token...');
-        const turnstileResult = await verifyTurnstile(body.turnstileToken, env.TURNSTILE_SECRET_KEY);
-        console.log('[Worker] Turnstile result:', turnstileResult);
-        if (!turnstileResult.success) {
-          console.log('[Worker] Turnstile verification failed');
-          return errorResponse('Bot verification failed', 400);
-        }
-
         // ===== Template Method: 可変部分（各Workerが実装） =====
         // 6. 入力データのサニタイズ
-        console.log('[Worker] Sanitizing input data...');
+        logger.debug('Sanitizing input data');
         const sanitizedMessage = config.sanitize(body);
 
         // ===== Template Method: 固定部分の再開 =====
@@ -163,15 +170,15 @@ export function createSqsWorker<TRequest extends SqsWorkerRequest>(
         }
 
         // 7. SQSへのメッセージ送信
-        console.log('[Worker] Sending message to SQS...');
-        await sendToSqs(sanitizedMessage, env);
-        console.log('[Worker] Message sent to SQS successfully');
+        logger.debug('Sending message to SQS');
+        await sendToSqs(sanitizedMessage, env, logger);
+        logger.info('Message sent to SQS successfully');
 
-        console.log('[Worker] Returning success response');
+        logger.debug('Returning success response');
         return successResponse(config.successMessage);
       } catch (error) {
         // 8. エラーハンドリング
-        console.error('[Worker] Error processing request:', error);
+        logger.error('Error processing request', { error: stringifyError(error) });
 
         // JSON パースエラーやバリデーションエラーは 400 Bad Request
         if (error instanceof SyntaxError) {

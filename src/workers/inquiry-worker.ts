@@ -16,6 +16,7 @@ interface InquiryRequest extends SqsWorkerRequest {
 }
 
 export default createSqsWorker<InquiryRequest>({
+  workerName: 'inquiry-worker',
   requiredFields: ['name', 'email', 'message'],
   messageField: 'message',
   successMessage: 'Inquiry submitted',

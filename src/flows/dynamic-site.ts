@@ -12,7 +12,7 @@ import { buildProjectConfig } from '../config';
  * - ALB/NLB によるロードバランサー
  * - Cloudflare による CDN/WAF
  */
-export function deployDynamicSite(app: App): void {
+export function deployDynamicSite(_app: App): void {
   const projectConfig = buildProjectConfig();
   const { environment } = projectConfig;
   console.log(`[Dynamic Site] Environment: ${environment}`);

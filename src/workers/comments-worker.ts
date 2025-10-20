@@ -17,6 +17,7 @@ interface CommentRequest extends SqsWorkerRequest {
 }
 
 export default createSqsWorker<CommentRequest>({
+  workerName: 'comments-worker',
   requiredFields: ['name', 'email', 'comment'],
   messageField: 'comment',
   successMessage: 'Comment submitted',

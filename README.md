@@ -71,10 +71,44 @@ npm run lint       # ESLint チェック
 npm test           # Jest テスト
 ```
 
-環境別に実行する場合は `ENVIRONMENT` と `STACK` を指定します。
+### デプロイターゲットの指定
+
+環境変数 `DEPLOY_TARGET` でデプロイ対象を指定できます。
 
 ```bash
-ENVIRONMENT=dev STACK=cloudflare npm run plan
+# S3 Media Offload のみ
+DEPLOY_TARGET=s3-media npm run deploy
+
+# 静的サイト配信（S3/CloudFront/DNS）のみ
+DEPLOY_TARGET=static-site npm run deploy
+
+# Jamstack API（Workers/SQS/Turnstile）のみ
+DEPLOY_TARGET=jamstack-api npm run deploy
+
+# Cloudflare Monitoring（Notification Policy）のみ
+DEPLOY_TARGET=cloudflare-monitoring npm run deploy
+
+# 静的サイト全体（static-site + jamstack-api + cloudflare-monitoring）
+DEPLOY_TARGET=static-full npm run deploy
+
+# すべてのスタック（デフォルト）
+npm run deploy
+```
+
+**利用可能な DEPLOY_TARGET:**
+
+- `s3-media`: WordPress S3 Media Offload 用インフラ
+- `static-site`: 静的サイト配信用インフラ（S3、CloudFront、Cloudflare DNS）
+- `jamstack-api`: Jamstack API 用インフラ（Cloudflare Workers、SQS、Turnstile）
+- `cloudflare-monitoring`: Cloudflare Notification Policy を用いた監視（オリジン到達性 / Edge エラー）
+- `static-full`: 静的サイト全体（static-site + jamstack-api + cloudflare-monitoring）
+- `dynamic-site`: 動的サイト用インフラ（将来実装予定）
+- 未指定または `all`: すべてのスタック
+
+環境別に実行する場合は `ENVIRONMENT` も指定します。
+
+```bash
+ENVIRONMENT=dev DEPLOY_TARGET=static-site npm run plan
 ```
 
 ### 環境変数設定のガイド

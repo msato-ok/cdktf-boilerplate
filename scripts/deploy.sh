@@ -16,6 +16,7 @@ fi
 #   --dry-run      Plan only (no deployment)
 #   --verbose      Show detailed output
 #   --serial       Force Terraform parallelism to 1
+#   --clean        Run npm run clean:state before deploying
 
 show_usage() {
   echo "Usage: $0 [options]" >&2
@@ -26,6 +27,7 @@ show_usage() {
   echo "  --dry-run               - Plan only (no deployment)" >&2
   echo "  --verbose               - Show detailed output" >&2
   echo "  --serial                - Force Terraform parallelism to 1 (deploy only)" >&2
+  echo "  --clean                 - Clean CDKTF state/cache before preparation" >&2
   echo "" >&2
   echo "環境変数:" >&2
   echo "  ENVIRONMENT=prod|dev" >&2
@@ -47,12 +49,14 @@ uses_local_toolkit_dependency() {
 DRY_RUN=false
 VERBOSE=false
 SERIAL=false
+CLEAN=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dry-run) DRY_RUN=true; shift ;;
     --verbose) VERBOSE=true; shift ;;
     --serial) SERIAL=true; shift ;;
+    --clean) CLEAN=true; shift ;;
     --help|-h) show_usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; show_usage; exit 1 ;;
   esac
@@ -77,7 +81,11 @@ fi
 echo ""
 
 echo "📋 [1/2] Cleanup & Preparation"
-npm run $NPM_SILENT clean:state || true
+if [[ "$CLEAN" == "true" ]]; then
+  npm run $NPM_SILENT clean:state || true
+else
+  [[ "$VERBOSE" == "true" ]] && echo "   Skipping npm run clean:state (use --clean to force)"
+fi
 npm run $NPM_SILENT get
 
 if uses_local_toolkit_dependency; then

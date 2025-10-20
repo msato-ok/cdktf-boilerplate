@@ -1,6 +1,6 @@
 import { App } from 'cdktf';
 import { StaticContentStack, CloudflareMediaStack, ensureAwsAuth } from '@minr-dev/cdktf-toolkit';
-import { buildProjectConfig } from '../config';
+import { buildProjectConfig, buildBackendConfig } from '../config';
 import { configureRemoteState } from '../shared/backend-helper';
 
 /**
@@ -19,25 +19,20 @@ export function deployS3Media(app: App): void {
   ensureAwsAuth();
 
   // S3Backend設定
-  const backendConfig = {
-    stateBucket: 'galileo-rent-terraform-state',
-    stateDynamodbTable: 'galileo-rent-terraform-lock',
-    stateRegion: projectConfig.awsRegion,
-    stateKeyPrefix: 'galileo-rent',
-    environment,
-  };
+  const backendConfig = buildBackendConfig(environment, projectConfig.awsRegion);
 
-  const cdnFqdn = `${projectConfig.cdnSubDomain}.${projectConfig.cdnBaseDomain}`;
+  const { s3Media } = projectConfig;
+  const cdnFqdn = `${s3Media.subDomain}.${s3Media.baseDomain}`;
 
   // 1. AWS S3 Media スタック（StaticContentStack の S3 メディア用ファクトリーで構築）
   const awsS3MediaStack = StaticContentStack.createForS3Media(app, 'aws-s3-media-stack', {
     environment,
     awsRegion: projectConfig.awsRegion,
-    bucketName: projectConfig.cdnBucketName,
+    bucketName: s3Media.bucketName,
     customDomain: cdnFqdn,
-    oacName: projectConfig.cdnOacName,
-    deployUserName: projectConfig.iamUserName,
-    deployPolicyName: projectConfig.iamPolicyName,
+    oacName: s3Media.oacName,
+    deployUserName: s3Media.iamUserName,
+    deployPolicyName: s3Media.iamPolicyName,
   });
 
   configureRemoteState(awsS3MediaStack, {
@@ -53,8 +48,8 @@ export function deployS3Media(app: App): void {
 
   const cloudflareMediaStack = new CloudflareMediaStack(app, 'cloudflare-media-stack', {
     environment,
-    domainName: projectConfig.cdnBaseDomain,
-    subDomainName: projectConfig.cdnSubDomain,
+    domainName: s3Media.baseDomain,
+    subDomainName: s3Media.subDomain,
     cloudfrontDomainName: awsS3MediaStack.cloudfrontDomainName,
     acmValidationRecord: awsS3MediaStack.acmValidationRecord,
   });

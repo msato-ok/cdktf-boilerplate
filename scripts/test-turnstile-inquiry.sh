@@ -54,7 +54,13 @@ cat > "$TEST_HTML_FILE" << EOF
     </div>
     <div>
       <!-- Turnstile ウィジェット -->
-      <div class="cf-turnstile" data-sitekey="${TURNSTILE_SITE_KEY}"></div>
+      <div
+        class="cf-turnstile"
+        data-sitekey="${TURNSTILE_SITE_KEY}"
+        data-callback="onTurnstileSuccess"
+        data-error-callback="onTurnstileError"
+        data-expired-callback="onTurnstileExpired"
+      ></div>
     </div>
     <button type="submit">送信</button>
   </form>
@@ -62,11 +68,33 @@ cat > "$TEST_HTML_FILE" << EOF
   <div id="result"></div>
 
   <script>
+    let turnstileToken = '';
+
+    window.onTurnstileSuccess = token => {
+      turnstileToken = token;
+      document.getElementById('result').innerHTML = '<p>Turnstile 検証が完了しました。</p>';
+    };
+
+    window.onTurnstileError = () => {
+      turnstileToken = '';
+      document.getElementById('result').innerHTML = '<p>Turnstile エラーが発生しました。再度お試しください。</p>';
+    };
+
+    window.onTurnstileExpired = () => {
+      turnstileToken = '';
+      document.getElementById('result').innerHTML = '<p>Turnstile トークンの有効期限が切れました。再度認証してください。</p>';
+    };
+
     document.getElementById('inquiry-form').addEventListener('submit', async (e) => {
       e.preventDefault();
 
+      if (!turnstileToken) {
+        document.getElementById('result').innerHTML =
+          '<p>Turnstile 検証を完了してから送信してください。</p>';
+        return;
+      }
+
       const formData = new FormData(e.target);
-      const turnstileToken = document.querySelector('[name="cf-turnstile-response"]').value;
 
       const data = {
         turnstileToken: turnstileToken,
@@ -97,6 +125,13 @@ cat > "$TEST_HTML_FILE" << EOF
 EOF
 
 aws s3 cp "$TEST_HTML_FILE" "s3://${STATIC_SITE_BUCKET_NAME}/$TEST_HTML_FILE"
+
+STATIC_SITE_CLOUDFRONT_ID=$(./scripts/get-cloudfront-distribution-id.sh)
+
+aws cloudfront create-invalidation \
+  --distribution-id ${STATIC_SITE_CLOUDFRONT_ID} \
+  --paths "/${TEST_HTML_FILE}"
+
 cat << EOF
 # S3 に $TEST_HTML_FILE をデプロイしました。
 
